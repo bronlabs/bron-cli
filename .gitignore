@@ -1,0 +1,4 @@
+bin/
+generated/
+.idea/
+.DS_Store
