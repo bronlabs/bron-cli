@@ -27,22 +27,65 @@ type globalFlags struct {
 	query     string
 }
 
-const rootLong = `Bron CLI — public API client. Generated from the OpenAPI spec, talks to the API
-over JWT-signed HTTPS.
+const rootLong = `Bron CLI — public API client. Generated from the OpenAPI spec, talks to the API over JWT-signed HTTPS.
 
-Quick start:
-  bron auth keygen --out ~/.config/bron/keys/me.jwk
-  bron config init --workspace <wsId> --key-file ~/.config/bron/keys/me.jwk --set-active
-  bron transactions list --limit 5 --output table
-
-Resources follow the URL: ` + "`bron <resource> <verb>`" + ` (e.g. ` + "`bron transactions list`" + `,
-` + "`bron address-book create`" + `). Use ` + "`bron tx <type>`" + ` as a shortcut for creating a
-transaction of a given type. Workspace is implicit (from the active profile).
-
+Resources follow the URL: bron <resource> <verb>. The {workspaceId} is implicit (from the active profile).
 Output formats: --output json|yaml|jsonl|table. Filter with --query '.path[*].field'.
 Body composition: --file <path|->, --json '{...}', or per-field --<a>.<b> flags.
+Run "bron help <resource> <verb>" for the schema dump of any command.`
 
-See ` + "`bron help <resource> <verb>`" + ` for the schema dump of any command.`
+const rootExample = `  bron --help
+  bron <resource> --help
+  bron <resource> <verb> --help
+
+  bron auth keygen --out ~/.config/bron/keys/me.jwk
+  bron config init --workspace <wsId> --key-file ~/.config/bron/keys/me.jwk --set-active
+  bron config use-profile production
+  bron config set workspace=ws_abc
+
+  bron accounts list
+  bron accounts get acc_xxx
+  bron balances list --accountId acc_xxx
+  bron transactions list --transactionStatuses PENDING_APPROVAL,SIGNING --limit 50
+  bron transactions get tx_abc
+
+  bron address-book create --name "Alice" --address 0xA --networkId ethereum
+
+  bron transactions create \
+    --accountId acc_xxx \
+    --externalId $(uuidgen) \
+    --transactionType withdrawal \
+    --params.amount=100 \
+    --params.assetId=20145 \
+    --params.networkId=ethereum \
+    --params.toAddress=0xR
+
+  bron tx withdrawal --accountId acc_xxx --externalId $(uuidgen) \
+    --params.amount=100 --params.assetId=20145 \
+    --params.networkId=ethereum --params.toAddress=0xR
+
+  bron tx allowance --accountId acc_xxx --externalId $(uuidgen) \
+    --params.assetId=20145 --params.networkId=ethereum \
+    --params.toAddress=0xSPENDER --params.amount=1000
+
+  bron tx stake-delegation --accountId acc_xxx --externalId $(uuidgen) \
+    --params.amount=32 --params.assetId=ETH --params.poolId=pool_x
+
+  bron tx withdrawal --file ./tx.json
+  cat tx.json | bron tx withdrawal --file -
+  bron tx withdrawal --json '{"accountId":"acc_x","params":{"amount":100,"assetId":20145}}'
+
+  bron transactions dry-run --file ./tx.json
+  bron transactions approve tx_abc
+  bron transactions cancel  tx_abc
+
+  bron tx types
+  bron help transactions create
+
+  bron transactions list --output json --query '.transactions[*].transactionId'
+  bron accounts list --output table
+
+  bron completion zsh > ~/.zsh/completions/_bron`
 
 func main() {
 	gf := &globalFlags{}
@@ -51,6 +94,7 @@ func main() {
 		Use:           "bron <resource> <verb> [<id>...] [flags]",
 		Short:         "Bron CLI — public API client",
 		Long:          rootLong,
+		Example:       rootExample,
 		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
