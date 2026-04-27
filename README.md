@@ -1,77 +1,99 @@
 # bron CLI
 
-Public CLI for the Bron API. Single static Go binary, generated from the OpenAPI spec.
+Public CLI for the [Bron](https://bron.org) API. Single static binary, generated from the OpenAPI spec.
 
-Built on top of [`bron-sdk-go`](https://github.com/bronlabs/bron-sdk-go) — auth (JWT signing), HTTP client (retries, `APIError`) come from the SDK; the CLI adds dynamic command dispatch, profile config, output formatting.
-
-## Status
-
-In progress. See [BRO-486](https://linear.app/bron/issue/BRO-486/bron-cli-design-and-implementation) for the design and roadmap.
-
-## Build
-
-```bash
-make build              # generate + go build → bin/bron
-make generate           # regenerate cobra commands from OpenAPI
-make sync-spec          # copy bron-open-api-public.json from ../bron-sdk-go
-make test
-make lint
 ```
-
-`go.mod` uses `replace github.com/bronlabs/bron-sdk-go => ../bron-sdk-go` for local dev.
-On release this is dropped in favor of a tagged version.
-
-## Quick start
-
-```bash
-bron auth keygen --out ~/.bron/keys/me.jwk
-bron config init --name dev --workspace <wsId> --base-url https://api.bron.org \
-                 --key-file ~/.bron/keys/me.jwk --set-active
-
 bron transactions list --limit 5 --output table
-bron tx withdrawal --accountId acc_xxx --externalId $(uuidgen) \
-                   --params.amount=10 --params.assetId=20145 \
-                   --params.networkId=ethereum --params.toAddress=0xabc
-bron help transactions get
+bron tx withdrawal --accountId acc_xxx --params.amount=10 --params.toAddress=0xabc ...
+bron help transactions create
 ```
 
-## Commands at a glance
+## Install
 
-Generated from OpenAPI (one resource per first URL segment, verb is the remaining path-segments verbatim):
+### macOS / Linux (Homebrew)
+
+```bash
+brew install bronlabs/tap/bron-cli
+```
+
+### Pre-built binaries
+
+Download the latest release from [github.com/bronlabs/bron-cli/releases](https://github.com/bronlabs/bron-cli/releases) and put it on your `PATH`:
+
+```bash
+# darwin-arm64 example
+curl -L https://github.com/bronlabs/bron-cli/releases/latest/download/bron-darwin-arm64 -o /usr/local/bin/bron
+chmod +x /usr/local/bin/bron
+bron --version
+```
+
+### From source
+
+```bash
+go install github.com/bronlabs/bron-cli/cmd/bron@latest
+```
+
+## Set up authentication
+
+The CLI talks to the Bron API with a per-key JWT signature. You generate a P-256 keypair locally, register the **public** half with Bron (UI → API keys), and keep the **private** half on disk.
+
+```bash
+# 1. generate a keypair (private goes to a 0600 file, public is printed to stdout)
+bron auth keygen --out ~/.bron/keys/me.jwk
+
+# 2. paste the printed public JWK into the Bron UI to authorize this key
+#    (Bron returns nothing — the binding is by `kid`)
+
+# 3. wire it into a profile and set it active
+bron config init --name default \
+                 --workspace <your-workspace-id> \
+                 --base-url https://api.bron.org \
+                 --key-file ~/.bron/keys/me.jwk \
+                 --set-active
+
+# 4. sanity-check
+bron config            # = bron config show, with env overrides applied
+bron transactions list --limit 1
+```
+
+You can have multiple profiles (`--name staging` etc.) and switch with `bron config use-profile <name>`. Per-call overrides via `--profile`, `--workspace`, `--base-url`, `--key-file` or env vars (`BRON_PROFILE`, `BRON_WORKSPACE_ID`, `BRON_BASE_URL`, `BRON_API_KEY_FILE`).
+
+## How commands are shaped
+
+Every endpoint in the OpenAPI spec becomes a command:
 
 ```
 bron <resource> <verb> [<positional-id>...] [--<field>...] [--file <path> | --json '{...}']
 ```
 
-The `{workspaceId}` path parameter is always implicit (taken from the active profile or `--workspace`). Other path params are positional in URL order.
+- `<resource>` — first URL segment (`transactions`, `accounts`, `address-book`, …)
+- `<verb>` — remaining path segments verbatim (`list`, `get`, `create`, `accept-deposit-offer`, …)
+- `{workspaceId}` is implicit (from profile or `--workspace`); other path params are positional in URL order
+- query parameters become `--<name>` flags; body fields become `--<field>` / `--<a>.<b>` flags
 
-Special case: `bron tx <type>` is a shortcut for `bron transactions create --transactionType <type>`, with body fields exposed as `--params.<field>` flags. The list of `<type>` values comes from `CreateTransaction.params.oneOf` in the spec.
+Special case — `bron tx <type>`: shortcut for `transactions create --transactionType <type>`, with the type-specific body fields exposed as `--params.<field>`. List the available types with `bron tx types`.
 
-Service commands (hand-written, not generated):
+## Output formats and queries
 
-| Command | Purpose |
-|---|---|
-| `bron auth keygen` | generate a P-256 JWK keypair |
-| `bron config init` | create/update a profile (interactive or via flags) |
-| `bron config use-profile <name>` | set active profile |
-| `bron config set <k>=<v>` | update fields on a profile |
-| `bron config` / `bron config show` | print active profile (env overrides applied; `--raw` for unmodified YAML) |
-| `bron config list` | list all profiles |
-| `bron config path` | print the resolved config file path |
-| `bron help <resource> <verb>` | agent-friendly help: usage + flags + body/response schemas (`--output yaml` for YAML) |
+```bash
+bron transactions list --output json     # default
+bron transactions list --output yaml
+bron transactions list --output jsonl
+bron transactions list --output table
 
-## Global flags
+# JSONPath subset filter (no jq, no select — just navigation)
+bron transactions list      --query '.transactions[*].transactionId'
+bron transactions get <id>  --query '.status'
+bron accounts list          --output table --query '.accounts[*]'
+```
 
-| Flag | Purpose |
-|---|---|
-| `--profile` | config profile name (overrides `BRON_PROFILE` and `active_profile` in YAML) |
-| `--workspace` | override profile workspace |
-| `--base-url` | override profile base URL |
-| `--key-file` | override profile JWK private key path |
-| `--output` | `table \| json \| yaml \| jsonl` (default `json`) |
-| `--query` | JSONPath subset filter, e.g. `.transactions[*].transactionId` |
+For heavier transformations, pipe to `jq`:
 
-Env overrides applied on top of the profile (lowest precedence): `BRON_PROFILE`, `BRON_WORKSPACE_ID`, `BRON_BASE_URL`, `BRON_API_KEY_FILE`, `BRON_CONFIG`.
+```bash
+bron transactions list --output json | jq '.transactions[] | select(.status=="SIGNED")'
+```
+
+Date-shaped query parameters (names ending in `AtFrom`, `AtTo`, `Since`, `Before`, `After`) accept both ISO-8601 (`2026-04-01T00:00:00Z`, `2026-04-01`) and millisecond-epoch integers — the CLI normalizes to millis before sending.
 
 ## Body composition (write operations)
 
@@ -79,76 +101,82 @@ Two baseline sources (mutually exclusive), then field-flag overlay:
 
 1. `--file <path>` — read body from a file (`-` = stdin), **or**
 2. `--json '{...}'` — inline JSON string.
-3. `--<field>` / `--<a>.<b>` — structured field flags overlay (one flag per body field, generated from the request schema). Field values override matching paths in the baseline.
+3. `--<field>` / `--<a>.<b>` — structured field flags. Override matching paths in the baseline.
 
-Date-shaped query parameters (names ending in `AtFrom`, `AtTo`, `Since`, `Before`, `After`) accept both ISO-8601 (`2026-04-01T00:00:00Z`, `2026-04-01`) and millisecond-epoch integers — the CLI normalizes to millis before sending.
+```bash
+# baseline from file
+bron tx withdrawal --file ./tx.json
+
+# baseline from stdin
+cat tx.json | bron tx withdrawal --file -
+
+# baseline as inline JSON
+bron tx withdrawal --json '{"accountId":"acc_xxx","params":{"amount":100,"assetId":20145}}'
+
+# baseline + per-field overrides
+bron tx withdrawal --file ./tx.json \
+    --externalId $(uuidgen) \
+    --params.amount=250 \
+    --params.feeLevel=HIGH
+```
 
 ## Exit codes
 
-Mapped from HTTP status (per BRO-486):
+Mapped from HTTP status:
 
-| Status | Exit |
-|---|---|
-| `401` / `403` | `3` |
-| `404` | `4` |
-| `400` | `5` |
-| `409` | `6` |
-| `429` | `7` |
-| `5xx` | `8` |
-| other / non-API errors | `1` |
+| Status | Exit | |
+|---|---|---|
+| `401` / `403` | `3` | not authorized |
+| `404`         | `4` | not found |
+| `400`         | `5` | bad request |
+| `409`         | `6` | conflict |
+| `429`         | `7` | rate limited |
+| `5xx`         | `8` | server error |
+| other / non-API | `1` | |
+
+## Agent-friendly help
+
+```
+bron help                             # = bron --help
+bron help <resource>                  # list verbs for the resource
+bron help <resource> <verb>           # JSON schema dump (usage + flags + body + response)
+bron --output yaml help <r> <v>       # same dump in YAML
+```
+
+`bron help <resource> <verb>` is the entry point for any tooling that wants to introspect the CLI without parsing freeform `--help` text.
 
 ---
 
 ## Command reference
 
-Comprehensive list of every command the CLI exposes today. `list` is shown once with the full set of filters per resource — pick the subset you need.
+`list` is shown once with the full set of filters per resource — pick the subset you need. `<id>` placeholders are positional path arguments.
 
-### help / version / completion
-
-```
-bron --help
-bron --version
-bron help                             # = bron --help
-bron help <resource>                  # list verbs for the resource
-bron help <resource> <verb>           # JSON/YAML schema dump (agent mode), format via --output
-bron --output yaml help <res> <verb>  # same dump in YAML
-
-bron <resource> --help
-bron <resource> <verb> --help
-
-bron completion zsh > ~/.zsh/completions/_bron
-bron completion bash
-bron completion fish
-```
-
-### auth
+### auth / config / completion
 
 ```
 bron auth keygen
 bron auth keygen --out ~/.bron/keys/me.jwk
-```
 
-### config
-
-```
-bron config                           # = bron config show (env overrides applied)
+bron config                                      # = bron config show (env overrides applied)
 bron config show
-bron config show --raw                # YAML entry without env overrides
+bron config show --raw                           # YAML entry without env overrides
 bron config show --profile staging
 bron config list
 bron config path
-
 bron config init                                                       # interactive
 bron config init --name dev \
                  --workspace 70000 \
                  --base-url https://api.bron.org \
                  --key-file ~/.bron/keys/me.jwk \
                  --set-active
-
 bron config use-profile production
 bron config set workspace=70000
 bron config set base_url=https://api.bron.org key_file=~/.bron/keys/me.jwk
 bron config set --profile staging workspace=80000
+
+bron completion zsh > ~/.zsh/completions/_bron
+bron completion bash
+bron completion fish
 ```
 
 ### accounts / activities / address-book / balances / deposit-addresses / intents / members / stakes / transaction-limits / workspace
@@ -239,7 +267,7 @@ bron assets list --search btc \
                  --assetType native,token \
                  --limit 100 --offset 0
 bron assets get <assetId>
-bron assets prices                            # no filters in API
+bron assets prices                                # no filters in API
 
 bron networks list --networkIds ethereum,tron
 bron networks get <networkId>
@@ -250,8 +278,6 @@ bron symbols prices --baseSymbolIds s1,s2 --baseAssetIds 20145
 ```
 
 ### transactions — query
-
-Date filters accept **both millis (`1777311599505`) and ISO-8601 (`2026-04-01T00:00:00Z`, `2026-04-01`)** — the CLI normalizes to millis.
 
 ```
 bron transactions list --transactionIds tx_x \
@@ -269,7 +295,6 @@ bron transactions list --transactionIds tx_x \
                        --createdAtFrom 2026-04-01T00:00:00Z \
                        --createdAtTo   2026-04-27T23:59:59Z \
                        --updatedAtFrom 1775347200000 \
-                       --updatedAtTo   1777939199000 \
                        --terminatedAtFrom 2026-04-10 --terminatedAtTo 2026-04-27 \
                        --canSignWithDeviceId dev_x \
                        --includeEvents true \
@@ -310,7 +335,7 @@ bron transactions reject-outgoing-offer  <transactionId>
 ### tx <type> — shortcut for transactions create
 
 ```
-bron tx types                                 # list all available types
+bron tx types                                     # list all available types
 
 bron tx withdrawal \
     --accountId acc_xxx \
@@ -376,50 +401,6 @@ bron tx intents \
     --params.feeLevel=MEDIUM
 ```
 
-### body composition examples
-
-```
-# baseline from file
-bron tx withdrawal --file ./tx.json
-
-# baseline from stdin
-cat tx.json | bron tx withdrawal --file -
-
-# baseline as inline JSON
-bron tx withdrawal --json '{"accountId":"acc_xxx","params":{"amount":100,"assetId":20145}}'
-
-# baseline + per-field overrides
-bron tx withdrawal \
-    --file ./tx.json \
-    --externalId $(uuidgen) \
-    --params.amount=250 \
-    --params.feeLevel=HIGH
-
-# inline JSON + overrides (fields beat --json)
-bron tx withdrawal \
-    --json '{"accountId":"acc_xxx","params":{"amount":100,"assetId":20145}}' \
-    --params.toAddress=0xR
-```
-
-### output / query / global flags
-
-```
-bron --profile staging              transactions list
-bron --workspace ws_other           transactions list
-bron --base-url https://api.bron.org transactions list
-bron --key-file ~/.bron/keys/other.jwk transactions list
-
-bron transactions list --output json     # default
-bron transactions list --output yaml
-bron transactions list --output jsonl
-bron transactions list --output table
-
-bron transactions list      --query '.transactions[*].transactionId'
-bron transactions list      --query '.transactions[0]'
-bron transactions get <id>  --query '.status'
-bron accounts list          --output table --query '.accounts[*]'
-```
-
 ### env overrides
 
 ```
@@ -432,18 +413,44 @@ BRON_CONFIG=/tmp/cli.yaml                  bron config show
 
 ---
 
-## Layout
+## For contributors
+
+### Build & test
+
+```bash
+make build              # incremental: regen if spec/cligen changed, then go build
+make build-fast         # always regen, then build
+make generate           # force-run cligen against the OpenAPI spec
+make sync-spec          # pull bron-open-api-public.json from ../bron-sdk-go
+make dist               # cross-compile darwin/linux × amd64/arm64 into bin/
+make test
+make lint               # golangci-lint
+make lint-fix
+make tidy
+make clean              # remove bin/ and generated/
+make help               # full target list
+```
+
+`VERSION=<tag> make build` stamps the binary with `bron --version`.
+
+Generated files (`generated/commands.go`, `helpdoc.go`, `spec.go`, `spec.json`) are gitignored — `make build` regenerates them from `bron-open-api-public.json`. `bin/` is gitignored too.
+
+### Layout
 
 ```
-cmd/bron/        CLI binary entrypoint (root, help, auth, config commands)
-cmd/cligen/      OpenAPI → cobra commands generator
-internal/auth/   JWK keypair generation
-internal/body/   --file / --json / --<field> merge
-internal/client/ thin wrapper over bron-sdk-go/sdk/http (signing, path-param substitution)
-internal/config/ ~/.bron/config.yaml + profiles + env overrides
-internal/output/ table | json | yaml | jsonl + --query
-internal/qparam/ query-parameter coercion (ISO-8601 → millis for date params)
-internal/util/   tiny path helpers (~ expansion)
-generated/       output of cligen — commands.go, helpdoc.go, spec.go, spec.json (gitignored)
+cmd/bron/         CLI binary entrypoint (root, help, auth, config commands)
+cmd/cligen/       OpenAPI → cobra commands generator
+internal/auth/    JWK keypair generation
+internal/body/    --file / --json / --<field> merge
+internal/client/  thin wrapper over bron-sdk-go/sdk/http (signing, path-param substitution)
+internal/config/  ~/.bron/config.yaml + profiles + env overrides
+internal/output/  table | json | yaml | jsonl + --query
+internal/qparam/  query-parameter coercion (ISO-8601 → millis for date params)
+internal/util/    tiny path helpers (~ expansion)
+generated/        output of cligen (gitignored)
 bron-open-api-public.json   embedded OpenAPI spec, synced from bron-sdk-go
 ```
+
+### Built on
+
+[`bron-sdk-go`](https://github.com/bronlabs/bron-sdk-go) provides JWT signing, the HTTP client (retries, `APIError`), and shared types. The CLI adds dynamic command dispatch, profile config, output formatting.
