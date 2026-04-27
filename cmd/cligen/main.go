@@ -513,6 +513,8 @@ func emit(plan []plannedCmd, shortcuts []txShortcut) ([]byte, error) {
 	fmt.Fprintln(&b, "package generated")
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, `import (`)
+	fmt.Fprintln(&b, `	"fmt"`)
+	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, `	"github.com/spf13/cobra"`)
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, `	"github.com/bronlabs/bron-cli/internal/body"`)
@@ -569,14 +571,37 @@ func groupByResource(plan []plannedCmd) []resourceGroup {
 
 func emitResourceGroup(b *bytes.Buffer, g resourceGroup, provideVar string) {
 	verbs := make([]string, len(g.Commands))
+	hasList := false
 	for i, c := range g.Commands {
 		verbs[i] = c.Verb
+		if c.Verb == "list" {
+			hasList = true
+		}
 	}
 	fmt.Fprintln(b, "\t{")
 	fmt.Fprintf(b, "\t\tres := &cobra.Command{Use: %q, Short: %q, GroupID: \"api\"}\n", g.Name, strings.Join(verbs, ", "))
 	for _, c := range g.Commands {
 		emitCommand(b, c, provideVar)
 	}
+
+	// `bron <resource>` with no verb: default to `list` if available, otherwise
+	// emit an error pointing at the available actions.
+	if hasList {
+		fmt.Fprintln(b, "\t\tfor _, c := range res.Commands() {")
+		fmt.Fprintln(b, "\t\t\tif c.Name() == \"list\" {")
+		fmt.Fprintln(b, "\t\t\t\tres.RunE = c.RunE")
+		fmt.Fprintln(b, "\t\t\t\tres.Args = c.Args")
+		fmt.Fprintln(b, "\t\t\t\tres.Flags().AddFlagSet(c.Flags())")
+		fmt.Fprintln(b, "\t\t\t\tbreak")
+		fmt.Fprintln(b, "\t\t\t}")
+		fmt.Fprintln(b, "\t\t}")
+	} else {
+		fmt.Fprintln(b, "\t\tres.RunE = func(cmd *cobra.Command, args []string) error {")
+		fmt.Fprintf(b, "\t\t\treturn fmt.Errorf(\"specify an action: %s (available: %s)\")\n",
+			g.Name, strings.Join(verbs, ", "))
+		fmt.Fprintln(b, "\t\t}")
+	}
+
 	fmt.Fprintln(b, "\t\troot.AddCommand(res)")
 	fmt.Fprintln(b, "\t}")
 }
@@ -691,22 +716,22 @@ func emitCommand(b *bytes.Buffer, c plannedCmd, provideVar string) {
 
 func emitTxSubtree(b *bytes.Buffer, shortcuts []txShortcut, provideVar string) {
 	const txLong = "Create a transaction. Each <type> exposes its body fields as --params.<field> flags.\n" +
-		"Run \"bron tx types\" for the list of available types."
+		"See `bron tx --help` for the list of available types."
 
-	const txExample = "  bron tx withdrawal --accountId acc_x --externalId $(uuidgen) \\\n" +
-		"    --params.amount=100 --params.assetId=20145 \\\n" +
-		"    --params.networkId=ethereum --params.toAddress=0xR\n\n" +
-		"  bron tx allowance --accountId acc_x --externalId $(uuidgen) \\\n" +
-		"    --params.assetId=20145 --params.networkId=ethereum \\\n" +
-		"    --params.toAddress=0xSPENDER --params.amount=1000\n\n" +
-		"  bron tx stake-delegation --accountId acc_x --externalId $(uuidgen) \\\n" +
-		"    --params.amount=32 --params.assetId=ETH --params.poolId=pool_x\n\n" +
-		"  bron tx fiat-out --accountId acc_x --externalId $(uuidgen) \\\n" +
-		"    --params.amount=100 --params.assetId=20145 --params.fiatAssetId=USD \\\n" +
-		"    --params.networkId=ethereum --params.toAddressBookRecordId=rec_x\n\n" +
+	const txExample = "  bron tx withdrawal --accountId <accountId> --externalId <idempotencyKey> \\\n" +
+		"    --params.amount=100 --params.assetId=5000 \\\n" +
+		"    --params.networkId=ETH --params.toAddress=<address>\n\n" +
+		"  bron tx allowance --accountId <accountId> --externalId <idempotencyKey> \\\n" +
+		"    --params.assetId=5000 --params.networkId=ETH \\\n" +
+		"    --params.toAddress=<spenderAddress> --params.amount=1000\n\n" +
+		"  bron tx stake-delegation --accountId <accountId> --externalId <idempotencyKey> \\\n" +
+		"    --params.amount=32 --params.assetId=5000 --params.poolId=<poolId>\n\n" +
+		"  bron tx fiat-out --accountId <accountId> --externalId <idempotencyKey> \\\n" +
+		"    --params.amount=100 --params.assetId=5000 --params.fiatAssetId=USD \\\n" +
+		"    --params.networkId=ETH --params.toAddressBookRecordId=<recordId>\n\n" +
 		"  bron tx withdrawal --file ./tx.json\n" +
 		"  cat tx.json | bron tx withdrawal --file -\n" +
-		"  bron tx withdrawal --json '{\"accountId\":\"acc_x\",\"params\":{\"amount\":100,\"assetId\":20145}}'"
+		"  bron tx withdrawal --json '{\"accountId\":\"<accountId>\",\"params\":{\"amount\":100,\"assetId\":\"5000\"}}'"
 
 	fmt.Fprintln(b, "\t{")
 	fmt.Fprintln(b, "\t\ttx := &cobra.Command{")
@@ -715,25 +740,6 @@ func emitTxSubtree(b *bytes.Buffer, shortcuts []txShortcut, provideVar string) {
 	fmt.Fprintln(b, "\t\t\tGroupID: \"api\",")
 	fmt.Fprintf(b, "\t\t\tLong:    %q,\n", txLong)
 	fmt.Fprintf(b, "\t\t\tExample: %q,\n", txExample)
-	fmt.Fprintln(b, "\t\t}")
-
-	// `bron tx types` — list all known shortcut keys
-	fmt.Fprintln(b, "\t\t{")
-	fmt.Fprintln(b, "\t\t\ttypes := []string{")
-	for _, s := range shortcuts {
-		fmt.Fprintf(b, "\t\t\t\t%q,\n", s.Key)
-	}
-	fmt.Fprintln(b, "\t\t\t}")
-	fmt.Fprintln(b, "\t\t\tcmd := &cobra.Command{")
-	fmt.Fprintln(b, `				Use:   "types",`)
-	fmt.Fprintln(b, `				Short: "list all transaction types",`)
-	fmt.Fprintln(b, "\t\t\t\tRun: func(cmd *cobra.Command, args []string) {")
-	fmt.Fprintln(b, "\t\t\t\t\tfor _, t := range types {")
-	fmt.Fprintln(b, "\t\t\t\t\t\tcmd.Println(t)")
-	fmt.Fprintln(b, "\t\t\t\t\t}")
-	fmt.Fprintln(b, "\t\t\t\t},")
-	fmt.Fprintln(b, "\t\t\t}")
-	fmt.Fprintln(b, "\t\t\ttx.AddCommand(cmd)")
 	fmt.Fprintln(b, "\t\t}")
 
 	// One subcommand per type

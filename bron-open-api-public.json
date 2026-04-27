@@ -33,6 +33,11 @@
             "description" : "Account extra data",
             "type" : "object"
           },
+          "icon" : {
+            "description" : "Account icon: image path (e.g. 'accounts/logos/abc.png') or 'emoji:<utf8>' (e.g. 'emoji:🚀')",
+            "examples" : [ "emoji:🚀" ],
+            "type" : "string"
+          },
           "isTestnet" : {
             "description" : "Flag to indicate if the account is a testnet account",
             "type" : "boolean"
@@ -561,6 +566,29 @@
         },
         "type" : "object"
       },
+      "BridgeParams" : {
+        "properties" : {
+          "amount" : {
+            "description" : "The amount to bridge",
+            "examples" : [ "0.5" ],
+            "type" : "string"
+          },
+          "feeLevel" : {
+            "$ref" : "#/components/schemas/FeeLevel",
+            "default" : "medium",
+            "description" : "The fee level for the source-network withdrawal. [See details](/enums/FeeLevel)",
+            "examples" : [ "medium" ]
+          },
+          "sourceAssetId" : {
+            "description" : "The asset ID on the source network",
+            "examples" : [ "11" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "sourceAssetId", "amount" ],
+        "title" : "Bridge asset between connected networks (e.g. hyperEVM <-> hyperCORE). Destination asset is resolved by the bridge handler.",
+        "type" : "object"
+      },
       "CancelTransaction" : {
         "properties" : {
           "reason" : {
@@ -672,19 +700,31 @@
           "params" : {
             "description" : "Transaction specific parameters",
             "oneOf" : [ {
-              "$ref" : "#/components/schemas/WithdrawalParams"
-            }, {
-              "$ref" : "#/components/schemas/ActivateParams"
-            }, {
               "$ref" : "#/components/schemas/AddressActivationParams"
             }, {
               "$ref" : "#/components/schemas/AddressCreationParams"
             }, {
               "$ref" : "#/components/schemas/AllowanceParams"
             }, {
+              "$ref" : "#/components/schemas/BridgeParams"
+            }, {
+              "$ref" : "#/components/schemas/DefiMessageParams"
+            }, {
+              "$ref" : "#/components/schemas/DefiParams"
+            }, {
+              "$ref" : "#/components/schemas/DepositParams"
+            }, {
+              "$ref" : "#/components/schemas/FiatInParams"
+            }, {
+              "$ref" : "#/components/schemas/FiatOutParams"
+            }, {
               "$ref" : "#/components/schemas/IntentsParams"
             }, {
-              "$ref" : "#/components/schemas/SetupParams"
+              "$ref" : "#/components/schemas/LoyaltyParams"
+            }, {
+              "$ref" : "#/components/schemas/NFTAllowanceParams"
+            }, {
+              "$ref" : "#/components/schemas/NFTWithdrawalParams"
             }, {
               "$ref" : "#/components/schemas/StakeClaimParams"
             }, {
@@ -692,15 +732,11 @@
             }, {
               "$ref" : "#/components/schemas/StakeUnDelegationParams"
             }, {
+              "$ref" : "#/components/schemas/StakeWithdrawalParams"
+            }, {
               "$ref" : "#/components/schemas/SwapParams"
             }, {
               "$ref" : "#/components/schemas/WithdrawalParams"
-            }, {
-              "$ref" : "#/components/schemas/FiatExchangeParams"
-            }, {
-              "$ref" : "#/components/schemas/FiatOutParams"
-            }, {
-              "$ref" : "#/components/schemas/FiatInParams"
             } ]
           },
           "transactionType" : {
@@ -723,6 +759,60 @@
           }
         },
         "required" : [ "transactions" ],
+        "type" : "object"
+      },
+      "DefiMessageParams" : {
+        "properties" : {
+          "message" : {
+            "type" : "string"
+          },
+          "networkId" : {
+            "type" : "string"
+          },
+          "origin" : {
+            "description" : "Origin of defi operation",
+            "type" : "string"
+          },
+          "version" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "networkId", "origin", "message" ],
+        "type" : "object"
+      },
+      "DefiParams" : {
+        "properties" : {
+          "data" : {
+            "type" : "string"
+          },
+          "externalBroadcast" : {
+            "type" : "boolean"
+          },
+          "feeLevel" : {
+            "$ref" : "#/components/schemas/FeeLevel",
+            "description" : "[See details](/enums/FeeLevel)"
+          },
+          "networkId" : {
+            "type" : "string"
+          },
+          "origin" : {
+            "description" : "Origin of defi operation",
+            "type" : "string"
+          },
+          "rawTransactions" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "to" : {
+            "type" : "string"
+          },
+          "value" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "networkId", "origin" ],
         "type" : "object"
       },
       "DepositParams" : {
@@ -912,44 +1002,6 @@
       "FeeLevel" : {
         "enum" : [ "low", "medium", "high" ],
         "type" : "string"
-      },
-      "FiatExchangeParams" : {
-        "properties" : {
-          "amount" : {
-            "type" : "string"
-          },
-          "feeLevel" : {
-            "$ref" : "#/components/schemas/FeeLevel",
-            "description" : "[See details](/enums/FeeLevel)"
-          },
-          "fromAccountId" : {
-            "type" : "string"
-          },
-          "fromAssetId" : {
-            "type" : "string"
-          },
-          "fromBankAccountId" : {
-            "type" : "string"
-          },
-          "fromNetworkId" : {
-            "type" : "string"
-          },
-          "toAccountId" : {
-            "type" : "string"
-          },
-          "toAssetId" : {
-            "type" : "string"
-          },
-          "toBankAccountId" : {
-            "type" : "string"
-          },
-          "toNetworkId" : {
-            "type" : "string"
-          }
-        },
-        "required" : [ "amount", "fromAssetId", "fromNetworkId", "toAssetId", "toNetworkId" ],
-        "title" : "Fiat exchange",
-        "type" : "object"
       },
       "FiatInParams" : {
         "properties" : {
@@ -1255,6 +1307,15 @@
         },
         "type" : "object"
       },
+      "LoyaltyParams" : {
+        "properties" : {
+          "amount" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "amount" ],
+        "type" : "object"
+      },
       "MemberStatus" : {
         "enum" : [ "new", "active", "rejected", "deactivated" ],
         "type" : "string"
@@ -1302,6 +1363,90 @@
             "type" : "boolean"
           }
         },
+        "type" : "object"
+      },
+      "NFTAllowanceParams" : {
+        "properties" : {
+          "amount" : {
+            "type" : "string"
+          },
+          "approvalForAll" : {
+            "type" : "boolean"
+          },
+          "assetId" : {
+            "type" : "string"
+          },
+          "feeLevel" : {
+            "$ref" : "#/components/schemas/FeeLevel",
+            "description" : "[See details](/enums/FeeLevel)"
+          },
+          "networkFees" : {
+            "$ref" : "#/components/schemas/RequestedNetworkFees",
+            "type" : "object"
+          },
+          "toAddress" : {
+            "type" : "string"
+          },
+          "tokenId" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "assetId" ],
+        "title" : "NFT Allowance",
+        "type" : "object"
+      },
+      "NFTWithdrawalParams" : {
+        "properties" : {
+          "amount" : {
+            "description" : "The amount of transaction",
+            "examples" : [ "10.123" ],
+            "type" : "string"
+          },
+          "assetId" : {
+            "description" : "The asset ID for the transaction",
+            "examples" : [ "20145" ],
+            "type" : "string"
+          },
+          "feeLevel" : {
+            "$ref" : "#/components/schemas/FeeLevel",
+            "default" : "medium",
+            "description" : "The fee level for the withdrawal. [See details](/enums/FeeLevel)",
+            "examples" : [ "medium" ]
+          },
+          "includeFee" : {
+            "default" : "false",
+            "description" : "Indicates whether the fee should be included in the withdrawal amount or added on top of it",
+            "examples" : [ "false" ],
+            "type" : "boolean"
+          },
+          "networkFees" : {
+            "$ref" : "#/components/schemas/RequestedNetworkFees",
+            "description" : "Custom network fees parameters",
+            "type" : "object"
+          },
+          "toAccountId" : {
+            "description" : "In case of a transfer on a different account, the ID of the destination account",
+            "examples" : [ "w9jh0gf3w9qaxlre7enezt17" ],
+            "type" : "string"
+          },
+          "toAddress" : {
+            "description" : "Destination address for the transaction",
+            "examples" : [ "TKAduQVqNaTLyBzVvRrcctY6FFraowJ3Uc" ],
+            "type" : "string"
+          },
+          "toAddressBookRecordId" : {
+            "description" : "In case of a withdrawal to address from address book, the ID of the address book record",
+            "examples" : [ "a30lin1p2zr1wzqqt1l8n652" ],
+            "type" : "string"
+          },
+          "tokenId" : {
+            "description" : "The token ID for NFT",
+            "examples" : [ "1" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "amount", "assetId", "tokenId" ],
+        "title" : "NFT Transfer",
         "type" : "object"
       },
       "Network" : {
@@ -1628,6 +1773,21 @@
         },
         "required" : [ "assetId" ],
         "title" : "Stake undelegation",
+        "type" : "object"
+      },
+      "StakeWithdrawalParams" : {
+        "properties" : {
+          "amount" : {
+            "type" : "string"
+          },
+          "assetId" : {
+            "type" : "string"
+          },
+          "poolId" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "assetId" ],
         "type" : "object"
       },
       "Stakes" : {
@@ -2475,7 +2635,7 @@
   "paths" : {
     "/dictionary/asset-market-prices" : {
       "get" : {
-        "description" : "Provides market pricing data for asset ids\n\n<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "Provides market pricing data for asset ids\n\n<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "responses" : {
           "200" : {
             "content" : {
@@ -2557,7 +2717,7 @@
     },
     "/dictionary/assets" : {
       "get" : {
-        "description" : "Assets represent specific implementations of symbols on particular networks or exchanges. They are the concrete, actionable instances that users can actually hold, trade, or interact with.\n\n<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "Assets represent specific implementations of symbols on particular networks or exchanges. They are the concrete, actionable instances that users can actually hold, trade, or interact with.\n\n<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "description" : "Filter results to only include these specific asset IDs",
           "example" : [ "1,2,3" ],
@@ -2723,7 +2883,7 @@
     },
     "/dictionary/assets/{assetId}" : {
       "get" : {
-        "description" : "Retrieves information about a single asset by its ID\n\n<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "Retrieves information about a single asset by its ID\n\n<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "description" : "Filter results to only include these specific asset IDs",
           "example" : [ "1,2,3" ],
@@ -2896,7 +3056,7 @@
     },
     "/dictionary/networks" : {
       "get" : {
-        "description" : "Networks represent the underlying blockchain infrastructure or traditional financial systems where assets can exist and be transacted.\n\n<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "Networks represent the underlying blockchain infrastructure or traditional financial systems where assets can exist and be transacted.\n\n<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "description" : "Filter results to only include these specific network IDs",
           "example" : [ "BTC,ETH" ],
@@ -2991,7 +3151,7 @@
     },
     "/dictionary/networks/{networkId}" : {
       "get" : {
-        "description" : "Retrieves information about a single network by its ID\n\n<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "Retrieves information about a single network by its ID\n\n<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "networkId",
@@ -3081,7 +3241,7 @@
     },
     "/dictionary/symbol-market-prices" : {
       "get" : {
-        "description" : "Provides market pricing data for symbol ids\n\n<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "Provides market pricing data for symbol ids\n\n<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "description" : "The symbol IDs you want to get market prices for",
           "example" : [ "s2001,s2002" ],
@@ -3188,7 +3348,7 @@
     },
     "/dictionary/symbols" : {
       "get" : {
-        "description" : "Symbols represent the fundamental identity of a financial instrument - the ticker symbol and basic metadata that identifies what something is, regardless of where it exists or how it's implemented\n\n<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "Symbols represent the fundamental identity of a financial instrument - the ticker symbol and basic metadata that identifies what something is, regardless of where it exists or how it's implemented\n\n<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "description" : "Filter results to only include these specific symbol IDs",
           "in" : "query",
@@ -3307,7 +3467,7 @@
     },
     "/dictionary/symbols/{symbolId}" : {
       "get" : {
-        "description" : "Retrieves information about a single symbol by its ID\n\n<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "Retrieves information about a single symbol by its ID\n\n<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "description" : "Filter results to only include these specific symbol IDs",
           "in" : "query",
@@ -3433,7 +3593,7 @@
     },
     "/workspaces/{workspaceId}" : {
       "get" : {
-        "description" : "Retrieve information about workspace\n\n<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "Retrieve information about workspace\n\n<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "description" : "List of comma-separated workspace ids",
           "in" : "query",
@@ -3556,7 +3716,7 @@
     },
     "/workspaces/{workspaceId}/accounts" : {
       "get" : {
-        "description" : "Retrieve your accounts\n\n<sup>API Key permissions: View only, Manage Transfers, MPC Hot Signer</sup>",
+        "description" : "Retrieve your accounts\n\n<sup>API Key permissions: View only, Transaction Operator, Full Access, MPC Hot Signer</sup>",
         "parameters" : [ {
           "description" : "Filter by account types. [See details](/enums/AccountType)",
           "in" : "query",
@@ -3723,7 +3883,7 @@
     },
     "/workspaces/{workspaceId}/accounts/{accountId}" : {
       "get" : {
-        "description" : "<sup>API Key permissions: View only, Manage Transfers, MPC Hot Signer</sup>",
+        "description" : "<sup>API Key permissions: View only, Transaction Operator, Full Access, MPC Hot Signer</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",
@@ -3820,7 +3980,7 @@
     },
     "/workspaces/{workspaceId}/activities" : {
       "get" : {
-        "description" : "Retrieve information about all activities in the workspace\n\n<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "Retrieve information about all activities in the workspace\n\n<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "description" : "Filter activities for specific IDs",
           "in" : "query",
@@ -3976,7 +4136,7 @@
     },
     "/workspaces/{workspaceId}/address-book-records" : {
       "get" : {
-        "description" : "Retrieve information about crypto addresses in an workspace's address book\n\n<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "Retrieve information about crypto addresses in an workspace's address book\n\n<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "description" : "Filter by address book record IDs list",
           "in" : "query",
@@ -4163,7 +4323,7 @@
         "tags" : [ "address-book" ]
       },
       "post" : {
-        "description" : "Save a crypto address in an workspace's address book\n\n<sup>API Key permissions: Manage Transfers</sup>",
+        "description" : "Save a crypto address in an workspace's address book\n\n<sup>API Key permissions: Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",
@@ -4262,7 +4422,7 @@
     },
     "/workspaces/{workspaceId}/address-book-records/{recordId}" : {
       "delete" : {
-        "description" : "Deactivate a crypto address in an workspace's address book\n\n<sup>API Key permissions: Manage Transfers</sup>",
+        "description" : "Deactivate a crypto address in an workspace's address book\n\n<sup>API Key permissions: Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",
@@ -4357,7 +4517,7 @@
         "tags" : [ "address-book" ]
       },
       "get" : {
-        "description" : "Retrieve information about a crypto address in an workspace's address book\n\n<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "Retrieve information about a crypto address in an workspace's address book\n\n<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",
@@ -4454,7 +4614,7 @@
     },
     "/workspaces/{workspaceId}/addresses" : {
       "get" : {
-        "description" : "Retrieve information about all deposit addresses in an workspace\n\n<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "Retrieve information about all deposit addresses in an workspace\n\n<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "description" : "Filter addresses by account id",
           "in" : "query",
@@ -4634,7 +4794,7 @@
     },
     "/workspaces/{workspaceId}/balances" : {
       "get" : {
-        "description" : "When you perform request without accountIds or assetId or balanceIds, the method returns all balances which has non-zero balances only\n\n<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "When you perform request without accountIds or assetId or balanceIds, the method returns all balances which has non-zero balances only\n\n<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "description" : "Filter by account ID",
           "in" : "query",
@@ -4858,7 +5018,7 @@
     },
     "/workspaces/{workspaceId}/balances/{balanceId}" : {
       "get" : {
-        "description" : "Fetch balance details\n\n<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "Fetch balance details\n\n<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",
@@ -4955,7 +5115,7 @@
     },
     "/workspaces/{workspaceId}/intents" : {
       "post" : {
-        "description" : "Creates an intent for swaps between two assets. [More details](/intents/about).\n\n<sup>API Key permissions: Manage Transfers</sup>",
+        "description" : "Creates an intent for swaps between two assets. [More details](/intents/about).\n\n<sup>API Key permissions: Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",
@@ -5054,7 +5214,7 @@
     },
     "/workspaces/{workspaceId}/intents/{intentId}" : {
       "get" : {
-        "description" : "Returns the details of a single intents with price and status.\n\n<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "Returns the details of a single intents with price and status.\n\n<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",
@@ -5151,7 +5311,7 @@
     },
     "/workspaces/{workspaceId}/members" : {
       "get" : {
-        "description" : "Retrieve information about workspace members\n\n<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "Retrieve information about workspace members\n\n<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "description" : "Embed data about members' permission groups",
           "in" : "query",
@@ -5267,7 +5427,7 @@
     },
     "/workspaces/{workspaceId}/stakes" : {
       "get" : {
-        "description" : "<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "description" : "Return stakes only for specific account",
           "in" : "query",
@@ -5382,7 +5542,7 @@
     },
     "/workspaces/{workspaceId}/transaction-limits" : {
       "get" : {
-        "description" : "<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "description" : "[See details](/enums/TransactionLimitStatus)",
           "in" : "query",
@@ -5547,7 +5707,7 @@
     },
     "/workspaces/{workspaceId}/transaction-limits/{limitId}" : {
       "get" : {
-        "description" : "<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",
@@ -5644,7 +5804,7 @@
     },
     "/workspaces/{workspaceId}/transactions" : {
       "get" : {
-        "description" : "<sup>API Key permissions: View only, Manage Transfers, MPC Hot Signer</sup>",
+        "description" : "<sup>API Key permissions: View only, Transaction Operator, Full Access, MPC Hot Signer</sup>",
         "parameters" : [ {
           "description" : "Comma-separated transaction ids",
           "in" : "query",
@@ -5964,7 +6124,7 @@
         "tags" : [ "transactions" ]
       },
       "post" : {
-        "description" : "Universal Create Transaction endpoint for moving on-chain assets with full control over parameters. Use it to:\n\n* Transfer base currencies (BTC, ETH, etc.) or any supported token between your own accounts.\n\n* Send funds to any external blockchain address — directly or via a saved address-book record.\n\n* Fine-tune fees and network settings.\n\n<sup>API Key permissions: Manage Transfers</sup>",
+        "description" : "Universal Create Transaction endpoint for moving on-chain assets with full control over parameters. Use it to:\n\n* Transfer base currencies (BTC, ETH, etc.) or any supported token between your own accounts.\n\n* Send funds to any external blockchain address — directly or via a saved address-book record.\n\n* Fine-tune fees and network settings.\n\n<sup>API Key permissions: Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",
@@ -6063,7 +6223,7 @@
     },
     "/workspaces/{workspaceId}/transactions/bulk-create" : {
       "post" : {
-        "description" : "Bulk transactions creation. If the execution of an transaction fails, it will not affect the execution of other transactions. Failed transactions will be returned in the response. The bulk size should be less than 50 transactions.\n\n<sup>API Key permissions: Manage Transfers</sup>",
+        "description" : "Bulk transactions creation. If the execution of an transaction fails, it will not affect the execution of other transactions. Failed transactions will be returned in the response. The bulk size should be less than 50 transactions.\n\n<sup>API Key permissions: Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",
@@ -6162,7 +6322,7 @@
     },
     "/workspaces/{workspaceId}/transactions/dry-run" : {
       "post" : {
-        "description" : "Simulate (test) transaction execution, returns estimations without executing the transaction\n\n<sup>API Key permissions: Manage Transfers</sup>",
+        "description" : "Simulate (test) transaction execution, returns estimations without executing the transaction\n\n<sup>API Key permissions: Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",
@@ -6261,7 +6421,7 @@
     },
     "/workspaces/{workspaceId}/transactions/{transactionId}" : {
       "get" : {
-        "description" : "<sup>API Key permissions: View only, Manage Transfers, MPC Hot Signer</sup>",
+        "description" : "<sup>API Key permissions: View only, Transaction Operator, Full Access, MPC Hot Signer</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",
@@ -6358,7 +6518,7 @@
     },
     "/workspaces/{workspaceId}/transactions/{transactionId}/accept-deposit-offer" : {
       "post" : {
-        "description" : "<sup>API Key permissions: Manage Transfers</sup>",
+        "description" : "<sup>API Key permissions: Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",
@@ -6464,7 +6624,7 @@
     },
     "/workspaces/{workspaceId}/transactions/{transactionId}/approve" : {
       "post" : {
-        "description" : "Approve a transaction that triggered approval workflow due to transfer limits\n\n<sup>API Key permissions: Manage Transfers</sup>",
+        "description" : "Approve a transaction that triggered approval workflow due to transfer limits\n\n<sup>API Key permissions: Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",
@@ -6570,7 +6730,7 @@
     },
     "/workspaces/{workspaceId}/transactions/{transactionId}/cancel" : {
       "post" : {
-        "description" : "<sup>API Key permissions: Manage Transfers</sup>",
+        "description" : "<sup>API Key permissions: Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",
@@ -6676,7 +6836,7 @@
     },
     "/workspaces/{workspaceId}/transactions/{transactionId}/create-signing-request" : {
       "post" : {
-        "description" : "Create signing request for an transaction\n\n<sup>API Key permissions: Manage Transfers, MPC Hot Signer</sup>",
+        "description" : "Create signing request for an transaction\n\n<sup>API Key permissions: Full Access, MPC Hot Signer</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",
@@ -6773,7 +6933,7 @@
     },
     "/workspaces/{workspaceId}/transactions/{transactionId}/decline" : {
       "post" : {
-        "description" : "Decline a transaction pending approval due to limit restrictions\n\n<sup>API Key permissions: Manage Transfers</sup>",
+        "description" : "Decline a transaction pending approval due to limit restrictions\n\n<sup>API Key permissions: Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",
@@ -6879,7 +7039,7 @@
     },
     "/workspaces/{workspaceId}/transactions/{transactionId}/events" : {
       "get" : {
-        "description" : "<sup>API Key permissions: View only, Manage Transfers</sup>",
+        "description" : "<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",
@@ -6976,7 +7136,7 @@
     },
     "/workspaces/{workspaceId}/transactions/{transactionId}/reject-outgoing-offer" : {
       "post" : {
-        "description" : "<sup>API Key permissions: Manage Transfers</sup>",
+        "description" : "<sup>API Key permissions: Transaction Operator, Full Access</sup>",
         "parameters" : [ {
           "in" : "path",
           "name" : "workspaceId",

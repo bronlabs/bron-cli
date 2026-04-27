@@ -39,11 +39,11 @@ func newConfigInitCmd() *cobra.Command {
 		workspace string
 		baseURL   string
 		keyFile   string
-		setActive bool
 	)
 	c := &cobra.Command{
 		Use:   "init",
-		Short: "Create or update a profile interactively (or via flags)",
+		Short: "Create or update a profile (and activate it)",
+		Long:  "Creates or updates a profile, then makes it the active one. Use `bron config use-profile <name>` to switch back.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
 			if err != nil {
@@ -65,18 +65,21 @@ func newConfigInitCmd() *cobra.Command {
 				keyFile = prompt(r, "Path to private JWK file", existing.KeyFile)
 			}
 
+			previous := cfg.ActiveProfile
 			cfg.Profiles[name] = config.Profile{
 				Workspace: workspace,
 				BaseURL:   baseURL,
 				KeyFile:   keyFile,
 			}
-			if setActive || cfg.ActiveProfile == "" {
-				cfg.ActiveProfile = name
-			}
+			cfg.ActiveProfile = name
 			if err := cfg.Save(); err != nil {
 				return err
 			}
-			fmt.Fprintf(os.Stderr, "Saved profile %q to %s (active=%s).\n", name, cfg.FilePath(), cfg.ActiveProfile)
+			fmt.Fprintf(os.Stderr, "Saved profile %q to %s and made it active", name, cfg.FilePath())
+			if previous != "" && previous != name {
+				fmt.Fprintf(os.Stderr, " (was %q; switch back with `bron config use-profile %s`)", previous, previous)
+			}
+			fmt.Fprintln(os.Stderr, ".")
 			return nil
 		},
 	}
@@ -84,7 +87,6 @@ func newConfigInitCmd() *cobra.Command {
 	c.Flags().StringVar(&workspace, "workspace", "", "workspace id")
 	c.Flags().StringVar(&baseURL, "base-url", "", "API base URL")
 	c.Flags().StringVar(&keyFile, "key-file", "", "path to private JWK file")
-	c.Flags().BoolVar(&setActive, "set-active", false, "set this profile as active")
 	return c
 }
 
