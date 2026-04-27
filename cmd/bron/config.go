@@ -59,17 +59,21 @@ func newConfigInitCmd() *cobra.Command {
 				workspace = prompt(r, "Workspace ID", existing.Workspace)
 			}
 			if baseURL == "" {
-				baseURL = prompt(r, "Base URL", firstNonEmpty(existing.BaseURL, "https://api.bron.org"))
+				baseURL = firstNonEmpty(existing.BaseURL, "https://api.bron.org")
 			}
 			if keyFile == "" {
 				keyFile = prompt(r, "Path to private JWK file", existing.KeyFile)
 			}
 
 			previous := cfg.ActiveProfile
+			if baseURL == config.DefaultBaseURL {
+				baseURL = ""
+			}
 			cfg.Profiles[name] = config.Profile{
 				Workspace: workspace,
 				BaseURL:   baseURL,
 				KeyFile:   keyFile,
+				Proxy:     existing.Proxy,
 			}
 			cfg.ActiveProfile = name
 			if err := cfg.Save(); err != nil {
@@ -85,7 +89,8 @@ func newConfigInitCmd() *cobra.Command {
 	}
 	c.Flags().StringVar(&name, "name", "", "profile name (default: prompt)")
 	c.Flags().StringVar(&workspace, "workspace", "", "workspace id")
-	c.Flags().StringVar(&baseURL, "base-url", "", "API base URL")
+	c.Flags().StringVar(&baseURL, "base-url", "", "API base URL (defaults to https://api.bron.org)")
+	_ = c.Flags().MarkHidden("base-url")
 	c.Flags().StringVar(&keyFile, "key-file", "", "path to private JWK file")
 	return c
 }
@@ -117,7 +122,7 @@ func newConfigSetCmd() *cobra.Command {
 	var profile string
 	c := &cobra.Command{
 		Use:   "set <key>=<value> [<key>=<value> ...]",
-		Short: "Set fields on a profile (workspace, base_url, key_file)",
+		Short: "Set fields on a profile (workspace, key_file, proxy, base_url)",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
@@ -139,11 +144,16 @@ func newConfigSetCmd() *cobra.Command {
 				case "workspace", "workspace_id":
 					p.Workspace = v
 				case "base_url", "baseURL", "base-url":
+					if v == config.DefaultBaseURL {
+						v = ""
+					}
 					p.BaseURL = v
 				case "key_file", "keyFile", "key-file":
 					p.KeyFile = v
+				case "proxy", "http_proxy", "https_proxy":
+					p.Proxy = v
 				default:
-					return fmt.Errorf("unknown key %q (allowed: workspace, base_url, key_file)", k)
+					return fmt.Errorf("unknown key %q (allowed: workspace, key_file, proxy, base_url)", k)
 				}
 			}
 			cfg.Profiles[name] = p
@@ -184,22 +194,32 @@ func newConfigShowCmd() *cobra.Command {
 				if !ok {
 					return fmt.Errorf("profile %q not found", name)
 				}
-				return output.Print(map[string]interface{}{
+				out := map[string]interface{}{
 					"name":      name,
 					"workspace": p.Workspace,
-					"base_url":  p.BaseURL,
 					"key_file":  p.KeyFile,
-				})
+				}
+				if p.BaseURL != "" {
+					out["base_url"] = p.BaseURL
+				}
+				if p.Proxy != "" {
+					out["proxy"] = p.Proxy
+				}
+				return output.Print(out)
 			}
 			p, err := cfg.Resolve(profile)
 			if err != nil {
 				return err
 			}
-			return output.Print(map[string]interface{}{
+			out := map[string]interface{}{
 				"workspace": p.Workspace,
 				"base_url":  p.BaseURL,
 				"key_file":  p.KeyFile,
-			})
+			}
+			if p.Proxy != "" {
+				out["proxy"] = p.Proxy
+			}
+			return output.Print(out)
 		},
 	}
 	c.Flags().BoolVar(&raw, "raw", false, "print unmodified YAML entry without env overrides")

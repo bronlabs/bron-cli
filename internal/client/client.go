@@ -3,9 +3,11 @@ package client
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	sdkhttp "github.com/bronlabs/bron-sdk-go/sdk/http"
 
@@ -48,8 +50,29 @@ func New(p *config.Profile) (*Client, error) {
 		return nil, fmt.Errorf("read key file %s: %w", keyPath, err)
 	}
 
-	hc := sdkhttp.NewClient(p.BaseURL, strings.TrimSpace(string(keyBytes)))
+	httpClient, err := buildHTTPClient(p.Proxy)
+	if err != nil {
+		return nil, err
+	}
+	hc := sdkhttp.NewClientWithHTTP(p.BaseURL, strings.TrimSpace(string(keyBytes)), httpClient)
 	return &Client{http: hc, WorkspaceID: p.Workspace}, nil
+}
+
+// buildHTTPClient returns an *http.Client whose Transport is a clone of
+// http.DefaultTransport with proxy resolution wired in:
+//   - if proxyURL is set, all traffic goes through it (supports user:pass@host:port)
+//   - otherwise, falls back to HTTP_PROXY / HTTPS_PROXY / NO_PROXY env vars
+func buildHTTPClient(proxyURL string) (*http.Client, error) {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = http.ProxyFromEnvironment
+	if proxyURL != "" {
+		u, err := url.Parse(proxyURL)
+		if err != nil {
+			return nil, fmt.Errorf("parse proxy URL %q: %w", proxyURL, err)
+		}
+		transport.Proxy = http.ProxyURL(u)
+	}
+	return &http.Client{Timeout: 30 * time.Second, Transport: transport}, nil
 }
 
 // Do executes a request, substituting `{workspaceId}` and any other path

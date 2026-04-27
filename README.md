@@ -25,20 +25,20 @@ The CLI talks to the Bron API with a per-key JWT signature. You generate a P-256
 # 1. generate a keypair (private goes to a 0600 file, public is printed to stdout)
 bron auth keygen --out ~/.config/bron/keys/me.jwk
 
-# 2. paste the printed public JWK into the Bron UI to authorize this key
-#    (Bron returns nothing — the binding is by `kid`)
+# 2. paste the printed public JWK into the Bron UI to authorize this key (Bron returns nothing — the binding is by `kid`)
+...go to https://app.bron.org/settings/api-keys
 
 # 3. wire it into a profile (`init` activates the new profile automatically)
-bron config init --name default \
-                 --workspace <workspaceId> \
-                 --key-file ~/.config/bron/keys/me.jwk
+bron config init --name default --workspace <workspaceId> --key-file ~/.config/bron/keys/me.jwk
 
 # 4. sanity-check
-bron config                         # = bron config show, with env overrides applied
+bron config
 bron workspace info
 ```
 
-You can have multiple profiles (`--name staging` etc.) and switch with `bron config use-profile <name>`. Per-call overrides via `--profile`, `--workspace`, `--base-url`, `--key-file` or env vars (`BRON_PROFILE`, `BRON_WORKSPACE_ID`, `BRON_BASE_URL`, `BRON_API_KEY_FILE`).
+You can have multiple profiles (`--name staging` etc.) and switch with `bron config use-profile <name>`. Per-call overrides via `--profile`, `--workspace`, `--key-file`, `--proxy` or env vars (`BRON_PROFILE`, `BRON_WORKSPACE_ID`, `BRON_API_KEY_FILE`, `BRON_PROXY`).
+
+If you sit behind an HTTP/HTTPS proxy: persist it once with `bron config set proxy=http://user:pass@host:8080`, or set `HTTPS_PROXY` / `HTTP_PROXY` in the environment — both are honored automatically.
 
 ---
 
@@ -62,7 +62,7 @@ Examples:
   bron config
   bron config init --workspace <workspaceId> --key-file ~/.config/bron/keys/me.jwk
   bron config use-profile production
-  bron config set workspace=<workspaceId> base_url=https://api.bron.org
+  bron config set workspace=<workspaceId> key_file=~/.config/bron/keys/me.jwk
 
   bron accounts list --accountTypes vault --limit 50
   bron accounts get <accountId>
@@ -87,9 +87,15 @@ Examples:
     --params.includeFee=true
 
   bron tx allowance           # see "bron tx allowance --help" for params
+  bron tx bridge
+  bron tx deposit
+  bron tx defi
+  bron tx defi-message
+  bron tx intents
   bron tx stake-delegation
   bron tx stake-undelegation
   bron tx stake-claim
+  bron tx stake-withdrawal
   bron tx address-creation
   bron tx address-activation
   bron tx fiat-in
@@ -121,6 +127,7 @@ Examples:
   bron transactions bulk-create --file ./batch.json
 
   bron transactions list --output yaml
+  bron transactions list --output table --columns transactionId,status,transactionType,createdAt
   bron transactions list --output table --query '.transactions[*]'
   bron transactions get <transactionId> --query '.status'
 
@@ -154,14 +161,15 @@ Examples:
   bron address-book create --name "Alice" --address <address> --networkId ETH
   bron address-book delete <recordId>
 
-  bron completion zsh > ~/.zsh/completions/_bron
+  bron completion install              # auto-detects $SHELL (zsh|bash|fish)
 
 Flags:
-      --base-url string    API base URL (overrides profile)
+      --columns string     comma-separated keys to keep, e.g. transactionId,status,createdAt (works for json/yaml/jsonl/table)
   -h, --help               help for bron
       --key-file string    path to JWK private key (overrides profile)
       --output string      output format: table|json|yaml|jsonl (default json)
       --profile string     config profile name
+      --proxy string       HTTP/HTTPS proxy URL (overrides profile)
       --query string       JSONPath subset filter, e.g. .transactions[*].transactionId
   -v, --version            version for bron
       --workspace string   workspace id (overrides profile)
@@ -174,8 +182,9 @@ Use "bron <resource> <verb> --help" for any command's flags.
 ```
 BRON_PROFILE=staging                            bron transactions list
 BRON_WORKSPACE_ID=<workspaceId>                 bron transactions list
-BRON_BASE_URL=https://api.qa.bron.io            bron transactions list
 BRON_API_KEY_FILE=~/.config/bron/keys/other.jwk bron transactions list
+BRON_PROXY=http://user:pass@proxy:8080          bron transactions list
+HTTPS_PROXY=http://proxy:8080                   bron transactions list  # standard env vars are honored too
 BRON_CONFIG=/tmp/cli.yaml                       bron config show
 ```
 
@@ -194,26 +203,33 @@ bron <resource> <verb> [<positional-id>...] [--<field>...] [--file <path> | --js
 - `{workspaceId}` is implicit (from profile or `--workspace`); other path params are positional in URL order
 - query parameters become `--<name>` flags; body fields become `--<field>` / `--<a>.<b>` flags
 
-Special case — `bron tx <type>`: shortcut for `transactions create --transactionType <type>`, with the type-specific body fields exposed as `--params.<field>`. List the available types with `bron tx types`.
+Special case — `bron tx <type>`: shortcut for `transactions create --transactionType <type>`, with the type-specific body fields exposed as `--params.<field>`. List the available types with `bron tx --help`.
 
 ## Output formats and queries
 
 ```bash
-bron transactions list --output json     # default
+bron transactions list --output json     # default — pretty-printed JSON, colored on TTY
 bron transactions list --output yaml
 bron transactions list --output jsonl
-bron transactions list --output table
+bron transactions list --output table    # nested objects collapsed to {…} / […N], cells trimmed
 
 # JSONPath subset filter (no jq, no select — just navigation)
 bron transactions list      --query '.transactions[*].transactionId'
 bron transactions get <id>  --query '.status'
 bron accounts list          --output table --query '.accounts[*]'
+
+# --columns picks fields (works for json / yaml / jsonl / table) in the listed order
+bron transactions list --output table --columns transactionId,status,transactionType,createdAt
+bron transactions list --output json  --columns transactionId,status
+bron transactions get <id>            --columns transactionId,status,params
 ```
+
+JSON output is colored when stdout is a TTY. Disable with `NO_COLOR=1`, force on with `FORCE_COLOR=1`.
 
 For heavier transformations, pipe to `jq`:
 
 ```bash
-bron transactions list --output json | jq '.transactions[] | select(.status=="SIGNED")'
+bron transactions list --output json | jq '.transactions[] | select(.status=="signed")'
 ```
 
 Date-shaped query parameters (names ending in `AtFrom`, `AtTo`, `Since`, `Before`, `After`) accept both ISO-8601 (`2026-04-01T00:00:00Z`, `2026-04-01`) and millisecond-epoch integers — the CLI normalizes to millis before sending.

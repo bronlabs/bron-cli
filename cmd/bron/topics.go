@@ -21,33 +21,41 @@ Reference: https://docs.bron.org/api/auth`,
 
 	"profiles": `Profiles — config + env overrides
 
-A profile is a named tuple of (workspace, base_url, key_file). Config lives at
+A profile is a named tuple of (workspace, key_file, proxy, base_url). Config lives at
 ~/.config/bron/config.yaml (or $XDG_CONFIG_HOME/bron/config.yaml, or $BRON_CONFIG).
 Multiple profiles let you switch between environments without retyping flags.
 
 Resolution order (highest precedence first):
-  1. --profile / --workspace / --base-url / --key-file flags
-  2. BRON_PROFILE / BRON_WORKSPACE_ID / BRON_BASE_URL / BRON_API_KEY_FILE env vars
+  1. --profile / --workspace / --key-file / --proxy / --base-url flags
+  2. BRON_PROFILE / BRON_WORKSPACE_ID / BRON_API_KEY_FILE / BRON_PROXY / BRON_BASE_URL env vars
   3. active_profile from YAML
   4. profile named "default"
 
 Common workflow:
-  bron config init --name dev --workspace <wsId> --key-file ~/.config/bron/keys/me.jwk --set-active
+  bron config init --name dev --workspace <wsId> --key-file ~/.config/bron/keys/me.jwk
   bron config use-profile production
   bron config show              # what the HTTP client will see (env applied)
   bron config show --raw        # what is actually written in YAML
 
+Behind a corporate proxy?
+  bron config set proxy=http://user:pass@host:8080
+  # or set HTTPS_PROXY / HTTP_PROXY in the environment — both are honored.
+
+base_url defaults to https://api.bron.org and is hidden from help; override with
+  bron config set base_url=https://api.qa.bron.io   # mostly for QA / staging
+  # or pass --base-url per call, or BRON_BASE_URL=... in the environment.
+
 Reference: https://docs.bron.org/cli/profiles`,
 
-	"output": `Output — formats and queries
+	"output": `Output — formats, queries, columns
 
 Every command prints the API response in one of four formats, optionally filtered
-by a small JSONPath subset.
+by a small JSONPath subset and/or a column list.
 
-  --output json   (default)   pretty-printed JSON
+  --output json   (default)   pretty-printed JSON, colored on TTY
   --output yaml               YAML
   --output jsonl              one JSON document per line (good for piping)
-  --output table              aligned columns / key-value table
+  --output table              aligned columns; nested objects collapse to {…} / […N], cells trimmed
 
   --query .path[*].field      JSONPath subset:
       .foo.bar          object key (nested)
@@ -55,9 +63,20 @@ by a small JSONPath subset.
       .foo[*]           map over every element
       .foo[*].bar       map + pick a sub-key
 
+  --columns id,status,...     comma-separated key list to keep, in the listed order.
+                              Works for json / yaml / jsonl / table. For list-shape responses
+                              (e.g. {"transactions":[…]}) it narrows each element.
+
+JSON colors: NO_COLOR=1 disables, FORCE_COLOR=1 forces on.
+
 Heavier transformations: pipe to jq.
 
   bron transactions list --output json | jq '.transactions[] | select(.status=="signed")'
+
+Examples:
+  bron transactions list --output table --columns transactionId,status,transactionType,createdAt
+  bron transactions list --output json  --columns transactionId,status
+  bron transactions get <id>            --columns transactionId,status,params
 
 Reference: https://docs.bron.org/cli/output`,
 

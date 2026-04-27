@@ -12,9 +12,10 @@ import (
 )
 
 type Profile struct {
-	Workspace string `yaml:"workspace"`
-	BaseURL   string `yaml:"base_url"`
-	KeyFile   string `yaml:"key_file"`
+	Workspace string `yaml:"workspace,omitempty"`
+	BaseURL   string `yaml:"base_url,omitempty"`
+	KeyFile   string `yaml:"key_file,omitempty"`
+	Proxy     string `yaml:"proxy,omitempty"`
 }
 
 type Config struct {
@@ -23,7 +24,7 @@ type Config struct {
 	path          string
 }
 
-const defaultBaseURL = "https://api.bron.org"
+const DefaultBaseURL = "https://api.bron.org"
 
 func Path() (string, error) {
 	if p := os.Getenv("BRON_CONFIG"); p != "" {
@@ -113,8 +114,11 @@ func (c *Config) Resolve(name string) (*Profile, error) {
 	if v := os.Getenv("BRON_API_KEY_FILE"); v != "" {
 		p.KeyFile = v
 	}
+	if v := os.Getenv("BRON_PROXY"); v != "" {
+		p.Proxy = v
+	}
 	if p.BaseURL == "" {
-		p.BaseURL = defaultBaseURL
+		p.BaseURL = DefaultBaseURL
 	}
 
 	if !ok && p.Workspace == "" && p.KeyFile == "" {

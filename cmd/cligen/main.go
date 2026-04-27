@@ -273,6 +273,7 @@ type plannedCmd struct {
 	Path        string
 	Resource    string
 	Verb        string
+	Summary     string   // OpenAPI operation.summary, used as the cobra Short description
 	PathArgs    []string // names from URL placeholders, in order
 	QueryParams []param
 	BodyFields  []string // dot-paths for --<flag> body field overlay (skips oneOf)
@@ -301,6 +302,7 @@ func buildPlan(spec rawSpec) ([]plannedCmd, error) {
 			}
 			method := strings.ToUpper(key)
 			cmd := derive(method, route)
+			cmd.Summary = strings.TrimSpace(op.Summary)
 			for _, p := range op.Parameters {
 				if p.In == "query" {
 					cmd.QueryParams = append(cmd.QueryParams, param{Name: p.Name, Required: p.Required})
@@ -578,8 +580,12 @@ func emitResourceGroup(b *bytes.Buffer, g resourceGroup, provideVar string) {
 			hasList = true
 		}
 	}
+	// zsh completion groups commands that share the same Short into a
+	// single row, so always include the resource name to keep them
+	// unique — "get, list — balances" vs "get, list — accounts".
+	short := strings.Join(verbs, ", ") + " — " + g.Name
 	fmt.Fprintln(b, "\t{")
-	fmt.Fprintf(b, "\t\tres := &cobra.Command{Use: %q, Short: %q, GroupID: \"api\"}\n", g.Name, strings.Join(verbs, ", "))
+	fmt.Fprintf(b, "\t\tres := &cobra.Command{Use: %q, Short: %q, GroupID: \"api\"}\n", g.Name, short)
 	for _, c := range g.Commands {
 		emitCommand(b, c, provideVar)
 	}
@@ -626,9 +632,13 @@ func emitCommand(b *bytes.Buffer, c plannedCmd, provideVar string) {
 	for _, id := range c.PathArgs {
 		use += " <" + id + ">"
 	}
+	short := c.Summary
+	if short == "" {
+		short = c.Method
+	}
 	fmt.Fprintln(b, "\t\t\tcmd := &cobra.Command{")
 	fmt.Fprintf(b, "\t\t\t\tUse:   %q,\n", use)
-	fmt.Fprintf(b, "\t\t\t\tShort: %q,\n", c.Method+" "+c.Path)
+	fmt.Fprintf(b, "\t\t\t\tShort: %q,\n", short)
 	if n := len(c.PathArgs); n > 0 {
 		fmt.Fprintf(b, "\t\t\t\tArgs:  cobra.ExactArgs(%d),\n", n)
 	}

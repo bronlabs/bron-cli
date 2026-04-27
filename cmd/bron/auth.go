@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -56,6 +57,9 @@ func newAuthKeygenCmd() *cobra.Command {
 			path, err := util.Expand(out)
 			if err != nil {
 				return err
+			}
+			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+				return fmt.Errorf("create dir for %s: %w", path, err)
 			}
 			if err := os.WriteFile(path, []byte(priv+"\n"), 0o600); err != nil {
 				return fmt.Errorf("write %s: %w", path, err)

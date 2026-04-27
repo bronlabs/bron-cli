@@ -25,8 +25,10 @@ type globalFlags struct {
 	workspace string
 	baseURL   string
 	keyFile   string
+	proxy     string
 	output    string
 	query     string
+	columns   string
 }
 
 const rootLong = `Bron CLI — public API client.
@@ -43,7 +45,7 @@ const rootExample = `  bron help
   bron config
   bron config init --workspace <workspaceId> --key-file ~/.config/bron/keys/me.jwk
   bron config use-profile production
-  bron config set workspace=<workspaceId> base_url=https://api.bron.org
+  bron config set workspace=<workspaceId> key_file=~/.config/bron/keys/me.jwk
 
   bron accounts list --accountTypes vault --limit 50
   bron accounts get <accountId>
@@ -68,9 +70,15 @@ const rootExample = `  bron help
     --params.includeFee=true
 
   bron tx allowance           # see "bron tx allowance --help" for params
+  bron tx bridge
+  bron tx deposit
+  bron tx defi
+  bron tx defi-message
+  bron tx intents
   bron tx stake-delegation
   bron tx stake-undelegation
   bron tx stake-claim
+  bron tx stake-withdrawal
   bron tx address-creation
   bron tx address-activation
   bron tx fiat-in
@@ -102,6 +110,7 @@ const rootExample = `  bron help
   bron transactions bulk-create --file ./batch.json
 
   bron transactions list --output yaml
+  bron transactions list --output table --columns transactionId,status,transactionType,createdAt
   bron transactions list --output table --query '.transactions[*]'
   bron transactions get <transactionId> --query '.status'
 
@@ -135,7 +144,7 @@ const rootExample = `  bron help
   bron address-book create --name "Alice" --address <address> --networkId ETH
   bron address-book delete <recordId>
 
-  bron completion zsh > ~/.zsh/completions/_bron`
+  bron completion install              # auto-detects $SHELL (zsh|bash|fish)`
 
 func main() {
 	gf := &globalFlags{}
@@ -178,14 +187,18 @@ func main() {
 	})
 	root.PersistentFlags().StringVar(&gf.profile, "profile", "", "config profile name")
 	root.PersistentFlags().StringVar(&gf.workspace, "workspace", "", "workspace id (overrides profile)")
-	root.PersistentFlags().StringVar(&gf.baseURL, "base-url", "", "API base URL (overrides profile)")
+	root.PersistentFlags().StringVar(&gf.baseURL, "base-url", "", "API base URL (overrides profile; mostly for QA/staging)")
+	_ = root.PersistentFlags().MarkHidden("base-url")
 	root.PersistentFlags().StringVar(&gf.keyFile, "key-file", "", "path to JWK private key (overrides profile)")
+	root.PersistentFlags().StringVar(&gf.proxy, "proxy", "", "HTTP/HTTPS proxy URL (overrides profile)")
 	root.PersistentFlags().StringVar(&gf.output, "output", "", "output format: table|json|yaml|jsonl (default json)")
 	root.PersistentFlags().StringVar(&gf.query, "query", "", "JSONPath subset filter, e.g. .transactions[*].transactionId")
+	root.PersistentFlags().StringVar(&gf.columns, "columns", "", "comma-separated keys to keep, e.g. transactionId,status,createdAt (works for json/yaml/jsonl/table)")
 
 	root.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		output.SetFormat(gf.output)
 		output.SetQuery(gf.query)
+		output.SetColumns(gf.columns)
 	}
 
 	generated.Register(root, func() (*client.Client, error) { return buildClient(gf) })
@@ -206,6 +219,7 @@ func main() {
 	for _, c := range root.Commands() {
 		if c.Name() == "completion" {
 			c.GroupID = "system"
+			c.AddCommand(newCompletionInstallCmd())
 		}
 	}
 
@@ -238,6 +252,9 @@ func buildClient(gf *globalFlags) (*client.Client, error) {
 	}
 	if gf.keyFile != "" {
 		profile.KeyFile = gf.keyFile
+	}
+	if gf.proxy != "" {
+		profile.Proxy = gf.proxy
 	}
 	return client.New(profile)
 }
