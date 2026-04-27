@@ -17,7 +17,7 @@ func newConfigCmd() *cobra.Command {
 	show := newConfigShowCmd()
 	c := &cobra.Command{
 		Use:   "config",
-		Short: "Manage CLI profiles (~/.bron/config.yaml)",
+		Short: "Manage CLI profiles (~/.config/bron/config.yaml)",
 		Long:  "Without a subcommand: prints the active profile (same as `bron config show`).",
 		RunE:  show.RunE,
 	}

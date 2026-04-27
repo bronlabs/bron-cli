@@ -27,16 +27,38 @@ type globalFlags struct {
 	query     string
 }
 
+const rootLong = `Bron CLI — public API client. Generated from the OpenAPI spec, talks to the API
+over JWT-signed HTTPS.
+
+Quick start:
+  bron auth keygen --out ~/.config/bron/keys/me.jwk
+  bron config init --workspace <wsId> --key-file ~/.config/bron/keys/me.jwk --set-active
+  bron transactions list --limit 5 --output table
+
+Resources follow the URL: ` + "`bron <resource> <verb>`" + ` (e.g. ` + "`bron transactions list`" + `,
+` + "`bron address-book create`" + `). Use ` + "`bron tx <type>`" + ` as a shortcut for creating a
+transaction of a given type. Workspace is implicit (from the active profile).
+
+Output formats: --output json|yaml|jsonl|table. Filter with --query '.path[*].field'.
+Body composition: --file <path|->, --json '{...}', or per-field --<a>.<b> flags.
+
+See ` + "`bron help <resource> <verb>`" + ` for the schema dump of any command.`
+
 func main() {
 	gf := &globalFlags{}
 
 	root := &cobra.Command{
-		Use:           "bron",
+		Use:           "bron <resource> <verb> [<id>...] [flags]",
 		Short:         "Bron CLI — public API client",
+		Long:          rootLong,
 		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
+	root.AddGroup(
+		&cobra.Group{ID: "api", Title: "API commands:"},
+		&cobra.Group{ID: "system", Title: "System commands:"},
+	)
 	root.PersistentFlags().StringVar(&gf.profile, "profile", "", "config profile name")
 	root.PersistentFlags().StringVar(&gf.workspace, "workspace", "", "workspace id (overrides profile)")
 	root.PersistentFlags().StringVar(&gf.baseURL, "base-url", "", "API base URL (overrides profile)")
@@ -51,9 +73,24 @@ func main() {
 
 	generated.Register(root, func() (*client.Client, error) { return buildClient(gf) })
 
-	root.SetHelpCommand(newHelpCmd())
-	root.AddCommand(newAuthCmd())
-	root.AddCommand(newConfigCmd())
+	helpCmd := newHelpCmd()
+	helpCmd.GroupID = "system"
+	root.SetHelpCommand(helpCmd)
+
+	authCmd := newAuthCmd()
+	authCmd.GroupID = "system"
+	root.AddCommand(authCmd)
+
+	configCmd := newConfigCmd()
+	configCmd.GroupID = "system"
+	root.AddCommand(configCmd)
+
+	root.InitDefaultCompletionCmd()
+	for _, c := range root.Commands() {
+		if c.Name() == "completion" {
+			c.GroupID = "system"
+		}
+	}
 
 	if err := root.Execute(); err != nil {
 		var apiErr *sdkhttp.APIError

@@ -39,7 +39,7 @@ The CLI talks to the Bron API with a per-key JWT signature. You generate a P-256
 
 ```bash
 # 1. generate a keypair (private goes to a 0600 file, public is printed to stdout)
-bron auth keygen --out ~/.bron/keys/me.jwk
+bron auth keygen --out ~/.config/bron/keys/me.jwk
 
 # 2. paste the printed public JWK into the Bron UI to authorize this key
 #    (Bron returns nothing — the binding is by `kid`)
@@ -48,7 +48,7 @@ bron auth keygen --out ~/.bron/keys/me.jwk
 bron config init --name default \
                  --workspace <your-workspace-id> \
                  --base-url https://api.bron.org \
-                 --key-file ~/.bron/keys/me.jwk \
+                 --key-file ~/.config/bron/keys/me.jwk \
                  --set-active
 
 # 4. sanity-check
@@ -155,7 +155,7 @@ bron --output yaml help <r> <v>       # same dump in YAML
 
 ```
 bron auth keygen
-bron auth keygen --out ~/.bron/keys/me.jwk
+bron auth keygen --out ~/.config/bron/keys/me.jwk
 
 bron config                                      # = bron config show (env overrides applied)
 bron config show
@@ -167,11 +167,11 @@ bron config init                                                       # interac
 bron config init --name dev \
                  --workspace 70000 \
                  --base-url https://api.bron.org \
-                 --key-file ~/.bron/keys/me.jwk \
+                 --key-file ~/.config/bron/keys/me.jwk \
                  --set-active
 bron config use-profile production
 bron config set workspace=70000
-bron config set base_url=https://api.bron.org key_file=~/.bron/keys/me.jwk
+bron config set base_url=https://api.bron.org key_file=~/.config/bron/keys/me.jwk
 bron config set --profile staging workspace=80000
 
 bron completion zsh > ~/.zsh/completions/_bron
@@ -407,7 +407,7 @@ bron tx intents \
 BRON_PROFILE=staging                       bron transactions list
 BRON_WORKSPACE_ID=ws_other                 bron transactions list
 BRON_BASE_URL=https://api.qa.bron.io       bron transactions list
-BRON_API_KEY_FILE=~/.bron/keys/other.jwk   bron transactions list
+BRON_API_KEY_FILE=~/.config/bron/keys/other.jwk   bron transactions list
 BRON_CONFIG=/tmp/cli.yaml                  bron config show
 ```
 
@@ -443,7 +443,7 @@ cmd/cligen/       OpenAPI → cobra commands generator
 internal/auth/    JWK keypair generation
 internal/body/    --file / --json / --<field> merge
 internal/client/  thin wrapper over bron-sdk-go/sdk/http (signing, path-param substitution)
-internal/config/  ~/.bron/config.yaml + profiles + env overrides
+internal/config/  ~/.config/bron/config.yaml + profiles + env overrides
 internal/output/  table | json | yaml | jsonl + --query
 internal/qparam/  query-parameter coercion (ISO-8601 → millis for date params)
 internal/util/    tiny path helpers (~ expansion)

@@ -33,7 +33,10 @@ func Path() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".bron", "config.yaml"), nil
+	if base := os.Getenv("XDG_CONFIG_HOME"); base != "" {
+		return filepath.Join(base, "bron", "config.yaml"), nil
+	}
+	return filepath.Join(home, ".config", "bron", "config.yaml"), nil
 }
 
 func Load() (*Config, error) {

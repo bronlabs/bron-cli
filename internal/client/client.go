@@ -23,10 +23,10 @@ type Client struct {
 // into request paths via Do().
 func New(p *config.Profile) (*Client, error) {
 	if p.Workspace == "" {
-		return nil, fmt.Errorf("workspace not set (configure ~/.bron/config.yaml or pass --workspace)")
+		return nil, fmt.Errorf("workspace not set (configure ~/.config/bron/config.yaml or pass --workspace)")
 	}
 	if p.KeyFile == "" {
-		return nil, fmt.Errorf("api key file not set (configure ~/.bron/config.yaml or pass --key-file)")
+		return nil, fmt.Errorf("api key file not set (configure ~/.config/bron/config.yaml or pass --key-file)")
 	}
 	keyPath, err := util.Expand(p.KeyFile)
 	if err != nil {

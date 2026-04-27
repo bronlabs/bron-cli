@@ -569,7 +569,7 @@ func groupByResource(plan []plannedCmd) []resourceGroup {
 
 func emitResourceGroup(b *bytes.Buffer, g resourceGroup, provideVar string) {
 	fmt.Fprintln(b, "\t{")
-	fmt.Fprintf(b, "\t\tres := &cobra.Command{Use: %q, Short: %q}\n", g.Name, "operations on "+g.Name)
+	fmt.Fprintf(b, "\t\tres := &cobra.Command{Use: %q, Short: %q, GroupID: \"api\"}\n", g.Name, "operations on "+g.Name)
 	for _, c := range g.Commands {
 		emitCommand(b, c, provideVar)
 	}
@@ -686,8 +686,28 @@ func emitCommand(b *bytes.Buffer, c plannedCmd, provideVar string) {
 }
 
 func emitTxSubtree(b *bytes.Buffer, shortcuts []txShortcut, provideVar string) {
+	const txLong = "Create a transaction. Each <type> exposes its body fields as --params.<field> flags.\n" +
+		"Run `bron tx types` for the list of available types.\n\n" +
+		"Examples:\n" +
+		"  bron tx withdrawal       --accountId acc_x --externalId $(uuidgen) \\\n" +
+		"      --params.amount=100 --params.assetId=20145 \\\n" +
+		"      --params.networkId=ethereum --params.toAddress=0xR\n" +
+		"  bron tx allowance        --accountId acc_x --externalId $(uuidgen) \\\n" +
+		"      --params.assetId=20145 --params.networkId=ethereum \\\n" +
+		"      --params.toAddress=0xSPENDER --params.amount=1000\n" +
+		"  bron tx stake-delegation --accountId acc_x --externalId $(uuidgen) \\\n" +
+		"      --params.amount=32 --params.assetId=ETH --params.poolId=pool_x\n" +
+		"  bron tx fiat-out         --accountId acc_x --externalId $(uuidgen) \\\n" +
+		"      --params.amount=100 --params.assetId=20145 --params.fiatAssetId=USD \\\n" +
+		"      --params.networkId=ethereum --params.toAddressBookRecordId=rec_x"
+
 	fmt.Fprintln(b, "\t{")
-	fmt.Fprintln(b, `		tx := &cobra.Command{Use: "tx", Short: "create transaction (shortcut for transactions create --transactionType <type>)"}`)
+	fmt.Fprintln(b, "\t\ttx := &cobra.Command{")
+	fmt.Fprintln(b, "\t\t\tUse:     \"tx <type>\",")
+	fmt.Fprintln(b, "\t\t\tShort:   \"create a transaction (shortcut for `transactions create --transactionType <type>`)\",")
+	fmt.Fprintln(b, "\t\t\tGroupID: \"api\",")
+	fmt.Fprintf(b, "\t\t\tLong:    %q,\n", txLong)
+	fmt.Fprintln(b, "\t\t}")
 
 	// `bron tx types` — list all known shortcut keys
 	fmt.Fprintln(b, "\t\t{")
