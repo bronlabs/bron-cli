@@ -185,17 +185,17 @@ func newConfigShowCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			activeName := profile
+			if activeName == "" {
+				activeName = firstNonEmpty(cfg.ActiveProfile, "default")
+			}
 			if raw {
-				name := profile
-				if name == "" {
-					name = firstNonEmpty(cfg.ActiveProfile, "default")
-				}
-				p, ok := cfg.Profiles[name]
+				p, ok := cfg.Profiles[activeName]
 				if !ok {
-					return fmt.Errorf("profile %q not found", name)
+					return fmt.Errorf("profile %q not found", activeName)
 				}
 				out := map[string]interface{}{
-					"name":      name,
+					"profile":   activeName,
 					"workspace": p.Workspace,
 					"key_file":  p.KeyFile,
 				}
@@ -212,6 +212,7 @@ func newConfigShowCmd() *cobra.Command {
 				return err
 			}
 			out := map[string]interface{}{
+				"profile":   activeName,
 				"workspace": p.Workspace,
 				"base_url":  p.BaseURL,
 				"key_file":  p.KeyFile,

@@ -1,8 +1,10 @@
-github.com/bronlabs/bron-sdk-go v0.1.12 h1:AzKpXwSRqHaB8MV0YXF3zSw1PO+ONjObjbZU+MXmKbI=
-github.com/bronlabs/bron-sdk-go v0.1.12/go.mod h1:G5dK0Ml1uKYlEpScXb+6OI/DEdAU4WFjMHx11nEbV6Q=
+github.com/bronlabs/bron-sdk-go v0.1.13 h1:HEJuMhTH6hkC8TW7mpZjz4XPD0uJucF6EEf8W3T0kxA=
+github.com/bronlabs/bron-sdk-go v0.1.13/go.mod h1:QLyicgb8kgFuvS5SHIBHynBb6O6v+qS38ZKEL8FlVR8=
 github.com/cpuguy83/go-md2man/v2 v2.0.4/go.mod h1:tgQtvFlXSQOSOSIRvRPT7W67SCa46tRHOmNcaadrF8o=
 github.com/golang-jwt/jwt/v5 v5.3.0 h1:pv4AsKCKKZuqlgs5sUmn4x8UlGa0kEVt/puTpKx9vvo=
 github.com/golang-jwt/jwt/v5 v5.3.0/go.mod h1:fxCRLWMO43lRc8nhHWY6LGqRcf+1gQWArsqaEUEa5bE=
+github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
+github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=

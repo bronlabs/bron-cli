@@ -17,6 +17,7 @@
           },
           "createdAt" : {
             "examples" : [ "1742572023000" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "createdBy" : {
@@ -30,8 +31,7 @@
           },
           "extra" : {
             "$ref" : "#/components/schemas/AccountExtra",
-            "description" : "Account extra data",
-            "type" : "object"
+            "description" : "Account extra data"
           },
           "icon" : {
             "description" : "Account icon: image path (e.g. 'accounts/logos/abc.png') or 'emoji:<utf8>' (e.g. 'emoji:🚀')",
@@ -52,6 +52,7 @@
           },
           "updatedAt" : {
             "examples" : [ "1742572023000" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "workspaceId" : {
@@ -130,6 +131,7 @@
           },
           "createdAt" : {
             "examples" : [ "1742572023000" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "description" : {
@@ -187,6 +189,7 @@
           },
           "createdAt" : {
             "examples" : [ "1744369415583" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "createdBy" : {
@@ -218,6 +221,7 @@
           },
           "updatedAt" : {
             "examples" : [ "1744369415583" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "updatedBy" : {
@@ -258,6 +262,7 @@
           "createdAt" : {
             "description" : "Created at timestamp",
             "examples" : [ "1749646207296" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "createdBy" : {
@@ -277,6 +282,7 @@
           "lastUsedAt" : {
             "description" : "Last used at",
             "examples" : [ "1749646207296" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "memo" : {
@@ -314,6 +320,7 @@
           "updatedAt" : {
             "description" : "Last updated Updated at timestamp",
             "examples" : [ "1749646207296" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "updatedBy" : {
@@ -371,6 +378,7 @@
       "AllowanceParams" : {
         "properties" : {
           "amount" : {
+            "format" : "decimal",
             "type" : "string"
           },
           "assetId" : {
@@ -381,8 +389,7 @@
             "description" : "[See details](/enums/FeeLevel)"
           },
           "networkFees" : {
-            "$ref" : "#/components/schemas/RequestedNetworkFees",
-            "type" : "object"
+            "$ref" : "#/components/schemas/RequestedNetworkFees"
           },
           "toAddress" : {
             "type" : "string"
@@ -412,12 +419,12 @@
           },
           "contractInformation" : {
             "$ref" : "#/components/schemas/SmartContractInformation",
-            "description" : "For crypto tokens, this contains the smart contract address and other technical blockchain details.",
-            "type" : "object"
+            "description" : "For crypto tokens, this contains the smart contract address and other technical blockchain details."
           },
           "decimals" : {
             "description" : "How many decimal places this asset can be split into",
             "examples" : [ "18" ],
+            "format" : "int32",
             "type" : "string"
           },
           "networkId" : {
@@ -486,6 +493,7 @@
           "createdAt" : {
             "description" : "Created at timestamp",
             "examples" : [ "1744369502340" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "networkId" : {
@@ -501,16 +509,19 @@
           "totalBalance" : {
             "description" : "The overall balance of a account",
             "examples" : [ "2.00021084" ],
+            "format" : "decimal",
             "type" : "string"
           },
           "updatedAt" : {
             "description" : "Last updated at timestamp",
             "examples" : [ "1744372384276" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "withdrawableBalance" : {
             "description" : "Balance available for withdrawal",
             "examples" : [ "1.00021084" ],
+            "format" : "decimal",
             "type" : "string"
           },
           "workspaceId" : {
@@ -571,6 +582,7 @@
           "amount" : {
             "description" : "The amount to bridge",
             "examples" : [ "0.5" ],
+            "format" : "decimal",
             "type" : "string"
           },
           "feeLevel" : {
@@ -652,6 +664,7 @@
           "fromAmount" : {
             "description" : "The amount of asset that will be sent. Optional, one of `fromAmount` or `toAmount` must be specified.",
             "examples" : [ "120.015" ],
+            "format" : "decimal",
             "type" : "string"
           },
           "fromAssetId" : {
@@ -665,6 +678,7 @@
           },
           "toAmount" : {
             "examples" : [ "117500.03" ],
+            "format" : "decimal",
             "type" : "string"
           },
           "toAssetId" : {
@@ -690,6 +704,7 @@
           "expiresAt" : {
             "description" : "Optional expiration time for the transaction",
             "examples" : [ "1753370264978" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "externalId" : {
@@ -820,6 +835,7 @@
           "amount" : {
             "description" : "The amount of transaction",
             "examples" : [ "10.123" ],
+            "format" : "decimal",
             "type" : "string"
           },
           "assetId" : {
@@ -851,8 +867,7 @@
             "type" : "string"
           },
           "extra" : {
-            "$ref" : "#/components/schemas/TransactionExtra",
-            "type" : "object"
+            "$ref" : "#/components/schemas/TransactionExtra"
           },
           "params" : {
             "type" : "object"
@@ -862,8 +877,7 @@
             "description" : "[See details](/enums/TransactionType)"
           },
           "warning" : {
-            "$ref" : "#/components/schemas/Warning",
-            "type" : "object"
+            "$ref" : "#/components/schemas/Warning"
           }
         },
         "required" : [ "transactionType", "accountId" ],
@@ -877,6 +891,7 @@
           },
           "amount" : {
             "description" : "Allowance amount",
+            "format" : "decimal",
             "type" : "string"
           },
           "networkId" : {
@@ -915,13 +930,11 @@
           },
           "rewardInfo" : {
             "$ref" : "#/components/schemas/StakeRewardInfo",
-            "description" : "Detail information for earn reward.",
-            "type" : "object"
+            "description" : "Detail information for earn reward."
           },
           "signingMessage" : {
             "$ref" : "#/components/schemas/SigningMessage",
-            "description" : "Detail information about signing message",
-            "type" : "object"
+            "description" : "Detail information about signing message"
           },
           "stakeInfo" : {
             "description" : "Detail information for 'stake' operations. ",
@@ -945,6 +958,7 @@
           },
           "amount" : {
             "description" : "Amount in event's asset units",
+            "format" : "decimal",
             "type" : "string"
           },
           "fromAccountId" : {
@@ -970,6 +984,7 @@
           },
           "amount" : {
             "description" : "Amount in event's asset units",
+            "format" : "decimal",
             "type" : "string"
           },
           "memo" : {
@@ -1007,6 +1022,7 @@
         "properties" : {
           "amount" : {
             "description" : "Amount to deposit",
+            "format" : "decimal",
             "type" : "string"
           },
           "assetId" : {
@@ -1015,6 +1031,7 @@
           },
           "fiatAmount" : {
             "description" : "Fiat amount to pay",
+            "format" : "decimal",
             "type" : "string"
           },
           "fiatAssetId" : {
@@ -1030,6 +1047,7 @@
         "properties" : {
           "amount" : {
             "description" : "Crypto amount to sell",
+            "format" : "decimal",
             "type" : "string"
           },
           "assetId" : {
@@ -1065,6 +1083,7 @@
         "properties" : {
           "createdAt" : {
             "examples" : [ "1749637592257" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "createdBy" : {
@@ -1085,10 +1104,12 @@
           },
           "lastUsedAt" : {
             "examples" : [ "1749637592257" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "updatedAt" : {
             "examples" : [ "1749637592257" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "userId" : {
@@ -1108,16 +1129,19 @@
           "createdAt" : {
             "description" : "Creation timestamp of the intent (epoch millis)",
             "examples" : [ "1794678400000" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "expiresAt" : {
             "description" : "Expiration timestamp of the intent (epoch millis)",
             "examples" : [ "1758188560749" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "fromAmount" : {
             "description" : "Amount of the from-asset specified by the user",
             "examples" : [ "100.50" ],
+            "format" : "decimal",
             "type" : "string"
           },
           "fromAssetId" : {
@@ -1133,6 +1157,7 @@
           "price" : {
             "description" : "Execution price of the swap (quote/base)",
             "examples" : [ "101.2312" ],
+            "format" : "decimal",
             "type" : "string"
           },
           "status" : {
@@ -1143,6 +1168,7 @@
           "toAmount" : {
             "description" : "Amount of the to-asset requested or estimated",
             "examples" : [ "0.0025" ],
+            "format" : "decimal",
             "type" : "string"
           },
           "toAssetId" : {
@@ -1153,11 +1179,13 @@
           "updatedAt" : {
             "description" : "Last update timestamp of the intent (epoch millis)",
             "examples" : [ "1794764800000" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "userSettlementDeadline" : {
             "description" : "Deadline timestamp for user settlement (epoch millis)",
             "examples" : [ "1759188567456" ],
+            "format" : "date-time-millis",
             "type" : "string"
           }
         },
@@ -1191,6 +1219,7 @@
           "amount" : {
             "description" : "Amount in USD",
             "examples" : [ "1000" ],
+            "format" : "decimal",
             "type" : "string"
           }
         },
@@ -1242,12 +1271,10 @@
       "LimitRule" : {
         "properties" : {
           "approve" : {
-            "$ref" : "#/components/schemas/LimitRuleApprove",
-            "type" : "object"
+            "$ref" : "#/components/schemas/LimitRuleApprove"
           },
           "securityDelay" : {
-            "$ref" : "#/components/schemas/LimitRuleSecurityDelay",
-            "type" : "object"
+            "$ref" : "#/components/schemas/LimitRuleSecurityDelay"
           },
           "skipApproval" : {
             "type" : "boolean"
@@ -1266,6 +1293,7 @@
           },
           "numberOfApprovals" : {
             "examples" : [ "2" ],
+            "format" : "int32",
             "type" : "string"
           }
         },
@@ -1276,6 +1304,7 @@
         "properties" : {
           "durationHours" : {
             "description" : "Duration of the transaction security delay in hours",
+            "format" : "int32",
             "type" : "string"
           }
         },
@@ -1297,11 +1326,11 @@
       "LimitTransactionParams" : {
         "properties" : {
           "aboveAmount" : {
-            "$ref" : "#/components/schemas/LimitAmount",
-            "type" : "object"
+            "$ref" : "#/components/schemas/LimitAmount"
           },
           "durationHours" : {
             "examples" : [ "24" ],
+            "format" : "int32",
             "type" : "string"
           }
         },
@@ -1310,6 +1339,7 @@
       "LoyaltyParams" : {
         "properties" : {
           "amount" : {
+            "format" : "decimal",
             "type" : "string"
           }
         },
@@ -1368,6 +1398,7 @@
       "NFTAllowanceParams" : {
         "properties" : {
           "amount" : {
+            "format" : "decimal",
             "type" : "string"
           },
           "approvalForAll" : {
@@ -1381,8 +1412,7 @@
             "description" : "[See details](/enums/FeeLevel)"
           },
           "networkFees" : {
-            "$ref" : "#/components/schemas/RequestedNetworkFees",
-            "type" : "object"
+            "$ref" : "#/components/schemas/RequestedNetworkFees"
           },
           "toAddress" : {
             "type" : "string"
@@ -1400,6 +1430,7 @@
           "amount" : {
             "description" : "The amount of transaction",
             "examples" : [ "10.123" ],
+            "format" : "decimal",
             "type" : "string"
           },
           "assetId" : {
@@ -1421,8 +1452,7 @@
           },
           "networkFees" : {
             "$ref" : "#/components/schemas/RequestedNetworkFees",
-            "description" : "Custom network fees parameters",
-            "type" : "object"
+            "description" : "Custom network fees parameters"
           },
           "toAccountId" : {
             "description" : "In case of a transfer on a different account, the ID of the destination account",
@@ -1459,6 +1489,7 @@
           "confirmations" : {
             "description" : "How many block confirmations are needed before a transaction is considered final and safe",
             "examples" : [ "6" ],
+            "format" : "int32",
             "type" : "string"
           },
           "explorerUrl" : {
@@ -1523,6 +1554,7 @@
       "RawTransactionParams" : {
         "properties" : {
           "amount" : {
+            "format" : "decimal",
             "type" : "string"
           },
           "assetId" : {
@@ -1537,8 +1569,7 @@
           },
           "networkFees" : {
             "$ref" : "#/components/schemas/RequestedNetworkFees",
-            "description" : "Custom network fees parameters",
-            "type" : "object"
+            "description" : "Custom network fees parameters"
           },
           "rawTransactions" : {
             "items" : {
@@ -1567,18 +1598,23 @@
       "RequestedNetworkFees" : {
         "properties" : {
           "feePerByte" : {
+            "format" : "int64",
             "type" : "string"
           },
           "gasLimit" : {
+            "format" : "int64",
             "type" : "string"
           },
           "gasPriceGwei" : {
+            "format" : "decimal",
             "type" : "string"
           },
           "maxFeePerGas" : {
+            "format" : "decimal",
             "type" : "string"
           },
           "maxPriorityFeePerGas" : {
+            "format" : "decimal",
             "type" : "string"
           }
         },
@@ -1645,12 +1681,12 @@
           },
           "blockchainNonce" : {
             "description" : "Blockchain nonce number for transaction ordering if applicable",
+            "format" : "int64",
             "type" : "string"
           },
           "messagesForSigning" : {
             "$ref" : "#/components/schemas/MessagesForSigning",
-            "description" : "Messages that need to be signed for this request",
-            "type" : "object"
+            "description" : "Messages that need to be signed for this request"
           },
           "networkId" : {
             "description" : "Network identifier specifying which blockchain network to use",
@@ -1666,13 +1702,11 @@
           },
           "signed" : {
             "$ref" : "#/components/schemas/Signed",
-            "description" : "Final signed transaction data ready for broadcasting",
-            "type" : "object"
+            "description" : "Final signed transaction data ready for broadcasting"
           },
           "signingData" : {
             "$ref" : "#/components/schemas/BlockchainSigningRequest",
-            "description" : "Blockchain transaction data that needs to be signed",
-            "type" : "object"
+            "description" : "Blockchain transaction data that needs to be signed"
           },
           "signingRequestId" : {
             "description" : "Unique identifier for this signing request",
@@ -1726,6 +1760,7 @@
       "StakeClaimParams" : {
         "properties" : {
           "amount" : {
+            "format" : "decimal",
             "type" : "string"
           },
           "assetId" : {
@@ -1742,6 +1777,7 @@
       "StakeDelegationParams" : {
         "properties" : {
           "amount" : {
+            "format" : "decimal",
             "type" : "string"
           },
           "assetId" : {
@@ -1762,6 +1798,7 @@
       "StakeUnDelegationParams" : {
         "properties" : {
           "amount" : {
+            "format" : "decimal",
             "type" : "string"
           },
           "assetId" : {
@@ -1778,6 +1815,7 @@
       "StakeWithdrawalParams" : {
         "properties" : {
           "amount" : {
+            "format" : "decimal",
             "type" : "string"
           },
           "assetId" : {
@@ -1797,6 +1835,7 @@
       "SwapParams" : {
         "properties" : {
           "fromAmount" : {
+            "format" : "decimal",
             "type" : "string"
           },
           "fromAssetId" : {
@@ -1806,6 +1845,7 @@
             "type" : "string"
           },
           "toAmount" : {
+            "format" : "decimal",
             "type" : "string"
           },
           "toAssetId" : {
@@ -1847,6 +1887,7 @@
           "price" : {
             "description" : "The actual market price - how much one unit of the base symbol costs in the quote symbol. For example, if Bitcoin costs $145,000 USD, this would be 145000",
             "examples" : [ "145000" ],
+            "format" : "decimal",
             "type" : "string"
           },
           "quoteSymbolId" : {
@@ -1900,6 +1941,7 @@
           "createdAt" : {
             "description" : "Transaction creation timestamp",
             "examples" : [ "1747241036052" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "createdBy" : {
@@ -1909,12 +1951,12 @@
           },
           "embedded" : {
             "$ref" : "#/components/schemas/TransactionEmbedded",
-            "description" : "Embedded related objects for this transaction",
-            "type" : "object"
+            "description" : "Embedded related objects for this transaction"
           },
           "expiresAt" : {
             "description" : "Transaction expiration timestamp",
             "examples" : [ "1747241036582" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "externalId" : {
@@ -1924,8 +1966,7 @@
           },
           "extra" : {
             "$ref" : "#/components/schemas/TransactionExtra",
-            "description" : "Additional transaction specific information",
-            "type" : "object"
+            "description" : "Additional transaction specific information"
           },
           "params" : {
             "description" : "Initial transaction specific parameters",
@@ -1964,6 +2005,7 @@
           "terminatedAt" : {
             "description" : "Transaction termination timestamp",
             "examples" : [ "1747241036782" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "transactionId" : {
@@ -1979,6 +2021,7 @@
           "updatedAt" : {
             "description" : "Transaction update timestamp",
             "examples" : [ "1747241089580" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "workspaceId" : {
@@ -2014,14 +2057,17 @@
           "number" : {
             "description" : "Number of users required to approve this transaction",
             "examples" : [ "2" ],
+            "format" : "int32",
             "type" : "string"
           },
           "securityDelayDuration" : {
             "description" : "Security delay duration in hours before transaction can be processed",
+            "format" : "int32",
             "type" : "string"
           },
           "securityDelayExpiresAt" : {
             "description" : "Security delay expiration time in milliseconds",
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "skipApproval" : {
@@ -2035,8 +2081,7 @@
         "properties" : {
           "currentSigningRequest" : {
             "$ref" : "#/components/schemas/SigningRequest",
-            "description" : "Current signing request",
-            "type" : "object"
+            "description" : "Current signing request"
           },
           "events" : {
             "description" : "Transaction events",
@@ -2052,6 +2097,7 @@
         "properties" : {
           "amount" : {
             "description" : "Amount",
+            "format" : "decimal",
             "type" : "string"
           },
           "assetId" : {
@@ -2060,6 +2106,7 @@
           },
           "createdAt" : {
             "description" : "Created at",
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "estimationId" : {
@@ -2072,8 +2119,7 @@
           },
           "extra" : {
             "$ref" : "#/components/schemas/EventExtra",
-            "description" : "Extra",
-            "type" : "object"
+            "description" : "Extra"
           },
           "networkId" : {
             "description" : "Network ID",
@@ -2089,6 +2135,7 @@
           },
           "usdAmount" : {
             "description" : "Total amount in USD",
+            "format" : "decimal",
             "type" : "string"
           }
         },
@@ -2107,6 +2154,7 @@
           },
           "amount" : {
             "description" : "Amount",
+            "format" : "decimal",
             "type" : "string"
           },
           "assetId" : {
@@ -2119,6 +2167,7 @@
           },
           "createdAt" : {
             "description" : "Created at",
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "eventId" : {
@@ -2131,8 +2180,7 @@
           },
           "extra" : {
             "$ref" : "#/components/schemas/EventExtra",
-            "description" : "Extra",
-            "type" : "object"
+            "description" : "Extra"
           },
           "networkId" : {
             "description" : "Network ID",
@@ -2148,6 +2196,7 @@
           },
           "usdAmount" : {
             "description" : "Total approximate amount in USD",
+            "format" : "decimal",
             "type" : "string"
           },
           "workspaceId" : {
@@ -2173,8 +2222,7 @@
       "TransactionExtra" : {
         "properties" : {
           "approvers" : {
-            "$ref" : "#/components/schemas/TransactionApprovers",
-            "type" : "object"
+            "$ref" : "#/components/schemas/TransactionApprovers"
           },
           "blockchainDetails" : {
             "description" : "The blockchain transaction details on an transaction",
@@ -2184,12 +2232,12 @@
             "type" : "array"
           },
           "blockchainRequest" : {
-            "$ref" : "#/components/schemas/BlockchainRequest",
-            "type" : "object"
+            "$ref" : "#/components/schemas/BlockchainRequest"
           },
           "confirmations" : {
             "description" : "Number of confirmations for a blockchain transaction",
             "examples" : [ "12" ],
+            "format" : "int64",
             "type" : "string"
           },
           "depositTransactionId" : {
@@ -2212,7 +2260,7 @@
             "examples" : [ "TSz8S8sfhWbaDKVH5bVM1U2rekX3Gr2zxY" ],
             "type" : "string"
           },
-          "fromWorkspaceImageId" : {
+          "fromWorkspaceIcon" : {
             "description" : "Image ID of the sender workspace (resolved at send time)",
             "type" : "string"
           },
@@ -2243,7 +2291,7 @@
             "examples" : [ "tb1qaprk5xy6t0m8yjdlnxscxqn9ek23uaej09eeax" ],
             "type" : "string"
           },
-          "toWorkspaceImageId" : {
+          "toWorkspaceIcon" : {
             "description" : "Image ID of the destination workspace (resolved at send time)",
             "type" : "string"
           },
@@ -2267,11 +2315,11 @@
       "TransactionLimit" : {
         "properties" : {
           "appliesTo" : {
-            "$ref" : "#/components/schemas/LimitAppliesTo",
-            "type" : "object"
+            "$ref" : "#/components/schemas/LimitAppliesTo"
           },
           "createdAt" : {
             "examples" : [ "1745344441863" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "createdBy" : {
@@ -2279,8 +2327,7 @@
             "type" : "string"
           },
           "destinations" : {
-            "$ref" : "#/components/schemas/LimitDestinations",
-            "type" : "object"
+            "$ref" : "#/components/schemas/LimitDestinations"
           },
           "externalId" : {
             "examples" : [ "pzkcv5thuuuk91hbv6qgko4x" ],
@@ -2291,27 +2338,25 @@
             "type" : "string"
           },
           "limitRule" : {
-            "$ref" : "#/components/schemas/LimitRule",
-            "type" : "object"
+            "$ref" : "#/components/schemas/LimitRule"
           },
           "limitType" : {
             "$ref" : "#/components/schemas/TransactionLimitType",
             "description" : "[See details](/enums/TransactionLimitType)"
           },
           "sources" : {
-            "$ref" : "#/components/schemas/LimitSources",
-            "type" : "object"
+            "$ref" : "#/components/schemas/LimitSources"
           },
           "status" : {
             "$ref" : "#/components/schemas/TransactionLimitStatus",
             "description" : "[See details](/enums/TransactionLimitStatus)"
           },
           "transactionParams" : {
-            "$ref" : "#/components/schemas/LimitTransactionParams",
-            "type" : "object"
+            "$ref" : "#/components/schemas/LimitTransactionParams"
           },
           "updatedAt" : {
             "examples" : [ "1745344441863" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "updatedBy" : {
@@ -2357,8 +2402,7 @@
       "Transactions" : {
         "properties" : {
           "embedded" : {
-            "$ref" : "#/components/schemas/TransactionEmbedded",
-            "type" : "object"
+            "$ref" : "#/components/schemas/TransactionEmbedded"
           },
           "transactions" : {
             "items" : {
@@ -2385,6 +2429,7 @@
           },
           "createdAt" : {
             "description" : "Created at timestamp in milliseconds",
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "createdBy" : {
@@ -2393,6 +2438,7 @@
           },
           "lastSignInAt" : {
             "description" : "Last sign in at timestamp in milliseconds",
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "userId" : {
@@ -2405,8 +2451,9 @@
       },
       "UserProfile" : {
         "properties" : {
-          "imageId" : {
-            "examples" : [ "users/logos/cd9775427b3b45c354145ca0e4c428c5aad596f4c70a7337e64bfe766f1fc098.png" ],
+          "icon" : {
+            "description" : "User icon: image path (e.g. 'users/logos/abc.png') or 'emoji:<utf8>' (e.g. 'emoji:🚀')",
+            "examples" : [ "emoji:🚀" ],
             "type" : "string"
           },
           "name" : {
@@ -2460,6 +2507,7 @@
           "amount" : {
             "description" : "The amount of transaction",
             "examples" : [ "10.123" ],
+            "format" : "decimal",
             "type" : "string"
           },
           "assetId" : {
@@ -2485,8 +2533,7 @@
           },
           "networkFees" : {
             "$ref" : "#/components/schemas/RequestedNetworkFees",
-            "description" : "Custom network fees parameters",
-            "type" : "object"
+            "description" : "Custom network fees parameters"
           },
           "networkId" : {
             "description" : "The asset's blockchain network name for the transaction",
@@ -2524,8 +2571,9 @@
       },
       "Workspace" : {
         "properties" : {
-          "imageId" : {
-            "description" : "Workspace image id",
+          "icon" : {
+            "description" : "Workspace icon: image path (e.g. 'workspaces/logos/abc.png') or 'emoji:<utf8>' (e.g. 'emoji:🚀')",
+            "examples" : [ "emoji:🚀" ],
             "type" : "string"
           },
           "name" : {
@@ -2551,16 +2599,17 @@
         "properties" : {
           "_embedded" : {
             "$ref" : "#/components/schemas/WorkspaceMemberEmbedded",
-            "description" : "Additional data about the member",
-            "type" : "object"
+            "description" : "Additional data about the member"
           },
           "createdAt" : {
             "description" : "Created at timestamp in milliseconds",
             "examples" : [ "1741373737119" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "deactivatedAt" : {
             "description" : "Deactivated at timestamp in milliseconds",
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "status" : {
@@ -2570,6 +2619,7 @@
           "updatedAt" : {
             "description" : "Last updated at timestamp in milliseconds",
             "examples" : [ "1743077054325" ],
+            "format" : "date-time-millis",
             "type" : "string"
           },
           "userId" : {
@@ -2605,8 +2655,7 @@
           },
           "profile" : {
             "$ref" : "#/components/schemas/UserProfile",
-            "description" : "Member's user information",
-            "type" : "object"
+            "description" : "Member's user information"
           }
         },
         "type" : "object"
@@ -2629,7 +2678,14 @@
   "info" : {
     "description" : "Bron API is based on the RESTish interface provided for data exchange between a client and a server with the use of HTTPS requests and responses.",
     "title" : "Bron API",
-    "version" : "latest"
+    "version" : "latest",
+    "x-bron-formats" : {
+      "bigint" : "Arbitrary-precision integer encoded as a JSON string.",
+      "date-time-millis" : "Epoch milliseconds (UTC) encoded as a JSON string. Convert with `new Date(parseInt(value))` or equivalent.",
+      "decimal" : "Arbitrary-precision decimal encoded as a JSON string.",
+      "int32" : "32-bit integer encoded as a JSON string.",
+      "int64" : "Long integer encoded as a JSON string to preserve precision (e.g. account IDs)."
+    }
   },
   "openapi" : "3.1.1",
   "paths" : {
@@ -2792,6 +2848,7 @@
           "name" : "limit",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -2799,6 +2856,7 @@
           "name" : "offset",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         } ],
@@ -2958,6 +3016,7 @@
           "name" : "limit",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -2965,6 +3024,7 @@
           "name" : "offset",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -3376,6 +3436,7 @@
           "name" : "limit",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -3383,6 +3444,7 @@
           "name" : "offset",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         } ],
@@ -3495,6 +3557,7 @@
           "name" : "limit",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -3502,6 +3565,7 @@
           "name" : "offset",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -3618,6 +3682,7 @@
           "name" : "limit",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -3625,6 +3690,7 @@
           "name" : "offset",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -3776,6 +3842,7 @@
           "name" : "offset",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -3784,6 +3851,7 @@
           "name" : "limit",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -3997,6 +4065,7 @@
           "name" : "offset",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -4004,6 +4073,7 @@
           "name" : "limit",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -4195,6 +4265,7 @@
           "required" : false,
           "schema" : {
             "default" : "500",
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -4203,6 +4274,7 @@
           "name" : "offset",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -4695,6 +4767,7 @@
           "name" : "limit",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -4703,6 +4776,7 @@
           "name" : "offset",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -4902,6 +4976,7 @@
           "name" : "updatedSince",
           "required" : false,
           "schema" : {
+            "format" : "date-time-millis",
             "type" : "string"
           }
         }, {
@@ -4919,6 +4994,7 @@
           "name" : "limit",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -4927,6 +5003,7 @@
           "name" : "offset",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -5609,6 +5686,7 @@
           "name" : "limit",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -5616,6 +5694,7 @@
           "name" : "offset",
           "required" : false,
           "schema" : {
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -5927,6 +6006,7 @@
           "name" : "terminatedAtFrom",
           "required" : false,
           "schema" : {
+            "format" : "date-time-millis",
             "type" : "string"
           }
         }, {
@@ -5935,6 +6015,7 @@
           "name" : "terminatedAtTo",
           "required" : false,
           "schema" : {
+            "format" : "date-time-millis",
             "type" : "string"
           }
         }, {
@@ -5943,6 +6024,7 @@
           "name" : "createdAtFrom",
           "required" : false,
           "schema" : {
+            "format" : "date-time-millis",
             "type" : "string"
           }
         }, {
@@ -5951,6 +6033,7 @@
           "name" : "createdAtTo",
           "required" : false,
           "schema" : {
+            "format" : "date-time-millis",
             "type" : "string"
           }
         }, {
@@ -5959,6 +6042,7 @@
           "name" : "updatedAtFrom",
           "required" : false,
           "schema" : {
+            "format" : "date-time-millis",
             "type" : "string"
           }
         }, {
@@ -5967,6 +6051,7 @@
           "name" : "updatedAtTo",
           "required" : false,
           "schema" : {
+            "format" : "date-time-millis",
             "type" : "string"
           }
         }, {
@@ -6002,6 +6087,7 @@
           "required" : false,
           "schema" : {
             "default" : "1000",
+            "format" : "int64",
             "type" : "string"
           }
         }, {
@@ -6011,6 +6097,7 @@
           "required" : false,
           "schema" : {
             "default" : "0",
+            "format" : "int64",
             "type" : "string"
           }
         }, {

@@ -12,16 +12,19 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
-// Globals are set by the root command's PersistentPreRun, then read by
+// Globals are set by the root command's PersistentPreRunE, then read by
 // generated subcommands when they call Print.
 var (
-	format  = "json"
-	query   = ""
-	columns []string
+	format   = "json"
+	query    = ""
+	columns  []string
+	cellMax  = 28
+	dateKeys = map[string]bool{}
 )
 
 // SetFormat updates the global output format. Empty string is ignored.
@@ -46,6 +49,27 @@ func SetColumns(c string) {
 	}
 }
 
+// SetCellMax sets the per-cell character cap for table output. 0 disables
+// truncation entirely (useful on wide terminals where full IDs / addresses
+// matter more than alignment). Negative or unset values keep the default.
+func SetCellMax(n int) {
+	if n >= 0 {
+		cellMax = n
+	}
+}
+
+// SetDateKeys configures the set of property names whose values are
+// epoch-milliseconds — populated at CLI startup from the OpenAPI spec by
+// collecting leaves with `format: "date-time-millis"`. Output formatters
+// humanize values for these keys to ISO-8601 UTC. Empty set disables
+// humanization entirely.
+func SetDateKeys(keys map[string]bool) {
+	dateKeys = make(map[string]bool, len(keys))
+	for k := range keys {
+		dateKeys[k] = true
+	}
+}
+
 // Print renders v according to the global format/query.
 func Print(v interface{}) error {
 	if query != "" {
@@ -62,6 +86,11 @@ func Print(v interface{}) error {
 	if len(columns) > 0 && f != "table" {
 		v = applyColumns(v)
 	}
+	// Convert epoch-millis date fields to ISO-8601 across every format. The
+	// public API ships timestamps as 13-digit millisecond strings ("1777304897620"),
+	// which is unreadable in CLI output and unhelpful for piping to grep/awk.
+	// jq keeps working — just on the ISO string instead of the raw integer.
+	v = humanizeDates(v)
 	switch f {
 	case "", "json":
 		return printJSON(os.Stdout, v)
@@ -74,6 +103,52 @@ func Print(v interface{}) error {
 	default:
 		return fmt.Errorf("unknown --output %q (table|json|yaml|jsonl)", format)
 	}
+}
+
+// HumanizeDates is the exported entry point for the same transformation Print
+// applies — used by hand-written commands (e.g. `bron tx subscribe`) that
+// build their own output pipelines but still want ISO dates by default.
+func HumanizeDates(v interface{}) interface{} { return humanizeDates(v) }
+
+// humanizeDates walks v and rewrites any value whose key is registered in the
+// dateKeys set (populated at startup from the OpenAPI spec via SetDateKeys —
+// every leaf with `format: "date-time-millis"`) into a UTC ISO-8601 timestamp.
+// Returns a new tree; the input is not mutated.
+func humanizeDates(v interface{}) interface{} {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		out := make(map[string]interface{}, len(t))
+		for k, val := range t {
+			if isDateColumn(k) {
+				if iso, ok := tryEpochMsToISO(val); ok {
+					out[k] = iso
+					continue
+				}
+			}
+			out[k] = humanizeDates(val)
+		}
+		return out
+	case []interface{}:
+		out := make([]interface{}, len(t))
+		for i, item := range t {
+			out[i] = humanizeDates(item)
+		}
+		return out
+	case orderedMap:
+		// orderedMap surfaces from applyColumns. Walk it preserving key order.
+		out := orderedMap{keys: append([]string(nil), t.keys...), vals: make(map[string]interface{}, len(t.vals))}
+		for k, val := range t.vals {
+			if isDateColumn(k) {
+				if iso, ok := tryEpochMsToISO(val); ok {
+					out.vals[k] = iso
+					continue
+				}
+			}
+			out.vals[k] = humanizeDates(val)
+		}
+		return out
+	}
+	return v
 }
 
 // orderedMap preserves field order across json / yaml rendering. Used when
@@ -144,14 +219,59 @@ func applyColumns(v interface{}) interface{} {
 }
 
 func pickFields(m map[string]interface{}) interface{} {
-	om := orderedMap{vals: map[string]interface{}{}}
+	om := &orderedMap{vals: map[string]interface{}{}}
 	for _, c := range columns {
-		if val, ok := m[c]; ok {
-			om.keys = append(om.keys, c)
-			om.vals[c] = val
+		val, ok := getDotPath(m, c)
+		if !ok {
+			continue
+		}
+		setOrderedDotPath(om, c, val)
+	}
+	return *om
+}
+
+// setOrderedDotPath places val into om at the given dot-path, creating
+// intermediate orderedMaps so the rendered JSON / YAML keeps the nested
+// shape ({"params": {"amount": "10"}}) instead of flat dotted keys.
+func setOrderedDotPath(om *orderedMap, path string, val interface{}) {
+	parts := strings.SplitN(path, ".", 2)
+	root := parts[0]
+	if len(parts) == 1 {
+		if _, exists := om.vals[root]; !exists {
+			om.keys = append(om.keys, root)
+		}
+		om.vals[root] = val
+		return
+	}
+	var sub *orderedMap
+	if existing, ok := om.vals[root]; ok {
+		if e, ok := existing.(orderedMap); ok {
+			sub = &orderedMap{keys: append([]string(nil), e.keys...), vals: e.vals}
 		}
 	}
-	return om
+	if sub == nil {
+		om.keys = append(om.keys, root)
+		sub = &orderedMap{vals: map[string]interface{}{}}
+	}
+	setOrderedDotPath(sub, parts[1], val)
+	om.vals[root] = *sub
+}
+
+// getDotPath walks a "foo.bar.baz" path through nested maps. Returns the leaf
+// value and true if every segment resolved.
+func getDotPath(v interface{}, path string) (interface{}, bool) {
+	cur := v
+	for _, p := range strings.Split(path, ".") {
+		m, ok := cur.(map[string]interface{})
+		if !ok {
+			return nil, false
+		}
+		cur, ok = m[p]
+		if !ok {
+			return nil, false
+		}
+	}
+	return cur, true
 }
 
 // PrintJSON is kept as an alias for callers that want JSON regardless of globals.
@@ -243,6 +363,9 @@ func printKVTable(w io.Writer, v interface{}) error {
 		return nil
 	}
 	keys := sortedKeys(m)
+	if len(columns) > 0 {
+		keys = columns
+	}
 	width := 0
 	for _, k := range keys {
 		if len(k) > width {
@@ -250,7 +373,8 @@ func printKVTable(w io.Writer, v interface{}) error {
 		}
 	}
 	for _, k := range keys {
-		fmt.Fprintf(w, "%-*s  %s\n", width, k, formatScalar(m[k]))
+		val, _ := getDotPath(m, k)
+		fmt.Fprintf(w, "%-*s  %s\n", width, k, formatTableCell(k, val))
 	}
 	return nil
 }
@@ -267,7 +391,6 @@ func printArrayTable(w io.Writer, arr []interface{}) error {
 
 	keys := selectTableColumns(rows)
 
-	const cellMax = 28 // per-cell hard cap; long ids/json get an ellipsis
 	cells := make([][]string, len(rows))
 	widths := make([]int, len(keys))
 	for i, k := range keys {
@@ -276,7 +399,8 @@ func printArrayTable(w io.Writer, arr []interface{}) error {
 	for i, row := range rows {
 		cells[i] = make([]string, len(keys))
 		for j, k := range keys {
-			s := truncCell(formatScalar(row[k]), cellMax)
+			val, _ := getDotPath(row, k)
+			s := truncCell(formatTableCell(k, val), cellMax)
 			cells[i][j] = s
 			if l := runeLen(s); l > widths[j] {
 				widths[j] = l
@@ -380,6 +504,56 @@ func formatScalar(v interface{}) string {
 		b, _ := json.Marshal(v)
 		return string(b)
 	}
+}
+
+// formatTableCell renders a value for a table cell. Like formatScalar, but
+// auto-converts epoch-millis values in *At/*Time columns to readable UTC.
+func formatTableCell(key string, v interface{}) string {
+	if isDateColumn(key) {
+		if iso, ok := tryEpochMsToISO(v); ok {
+			return iso
+		}
+	}
+	return formatScalar(v)
+}
+
+func isDateColumn(key string) bool {
+	// Match the last path segment (handles dot-paths like "transaction.createdAt").
+	if i := strings.LastIndex(key, "."); i >= 0 {
+		key = key[i+1:]
+	}
+	return dateKeys[key]
+}
+
+// tryEpochMsToISO converts a 13-digit string or numeric millis-since-epoch to
+// an ISO-8601 / RFC3339 UTC timestamp ("2026-04-27T15:48:17.620Z"). Anything
+// else is rejected.
+func tryEpochMsToISO(v interface{}) (string, bool) {
+	var ms int64
+	switch t := v.(type) {
+	case string:
+		if len(t) != 13 {
+			return "", false
+		}
+		n, err := strconv.ParseInt(t, 10, 64)
+		if err != nil {
+			return "", false
+		}
+		ms = n
+	case float64:
+		if t < 1e12 || t >= 1e14 {
+			return "", false
+		}
+		ms = int64(t)
+	case int64:
+		if t < 1e12 || t >= 1e14 {
+			return "", false
+		}
+		ms = t
+	default:
+		return "", false
+	}
+	return time.UnixMilli(ms).UTC().Format("2006-01-02T15:04:05.000Z"), true
 }
 
 // truncCell shortens a single cell value to fit table width.

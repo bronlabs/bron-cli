@@ -69,10 +69,10 @@ Examples:
 
   bron balances list --accountId <accountId> --assetId 5000 --networkId ETH --nonEmpty true
 
-  bron transactions list --transactionStatuses waiting-approval,signing --limit 50
-  bron transactions list --transactionTypes withdrawal,allowance --createdAtFrom 2026-04-01
-  bron transactions get    <transactionId>
-  bron transactions events <transactionId>
+  bron tx list --transactionStatuses waiting-approval,signing --limit 50
+  bron tx list --transactionTypes withdrawal,allowance --createdAtFrom 2026-04-01
+  bron tx get    <transactionId>
+  bron tx events <transactionId>
 
   bron tx withdrawal \
     --accountId <accountId> \
@@ -106,15 +106,24 @@ Examples:
   bron tx withdrawal --json '{"accountId":"<accountId>","params":{"amount":100,"assetId":"5000"}}'
   bron tx withdrawal --file ./tx.json --params.amount=250 --externalId <idempotencyKey>
 
-  bron transactions approve                <transactionId>
-  bron transactions decline                <transactionId>
-  bron transactions cancel                 <transactionId>
-  bron transactions create-signing-request <transactionId>
-  bron transactions accept-deposit-offer   <transactionId>
-  bron transactions reject-outgoing-offer  <transactionId>
+  bron tx approve                <transactionId>
+  bron tx decline                <transactionId>
+  bron tx cancel                 <transactionId>
+  bron tx create-signing-request <transactionId>
+  bron tx accept-deposit-offer   <transactionId>
+  bron tx reject-outgoing-offer  <transactionId>
+
+  # Pick a recipient — see `bron help addresses` for the full table:
+  #   --params.toAddress=<rawAddress>            on-chain address (raw)
+  #   --params.toAddressBookRecordId=<recordId>  pre-saved address-book entry (validated by Bron)
+  #   --params.toAccountId=<accountId>           internal transfer (instant, no fee path)
+  #   --params.toWorkspaceTag=<tag>              route to another Bron workspace
+  bron tx withdrawal --accountId <accId> --externalId <idem> \
+    --params.amount=100 --params.assetId=5000 --params.networkId=ETH \
+    --params.toAddressBookRecordId=<recordId>
 
   # Lower-level — when no "tx <type>" shortcut fits or you want full control:
-  bron transactions create \
+  bron tx create \
     --transactionType withdrawal \
     --accountId <accountId> \
     --externalId <idempotencyKey> \
@@ -123,13 +132,13 @@ Examples:
     --params.networkId=ETH \
     --params.toAddress=<address>
 
-  bron transactions dry-run     --file ./tx.json
-  bron transactions bulk-create --file ./batch.json
+  bron tx dry-run     --file ./tx.json
+  bron tx bulk-create --file ./batch.json
 
-  bron transactions list --output yaml
-  bron transactions list --output table --columns transactionId,status,transactionType,createdAt
-  bron transactions list --output table --query '.transactions[*]'
-  bron transactions get <transactionId> --query '.status'
+  bron tx list --output yaml --includeEvents true
+  bron tx list --output table --columns transactionId,status,transactionType,createdAt
+  bron tx list --output table --query '.transactions[*]'
+  bron tx get <transactionId> --query '.status'
 
   bron deposit-addresses list --accountId <accountId> --networkId ETH
 
@@ -180,11 +189,11 @@ Use "bron <resource> <verb> --help" for any command's flags.
 ### env overrides
 
 ```
-BRON_PROFILE=staging                            bron transactions list
-BRON_WORKSPACE_ID=<workspaceId>                 bron transactions list
-BRON_API_KEY_FILE=~/.config/bron/keys/other.jwk bron transactions list
-BRON_PROXY=http://user:pass@proxy:8080          bron transactions list
-HTTPS_PROXY=http://proxy:8080                   bron transactions list  # standard env vars are honored too
+BRON_PROFILE=staging                            bron tx list
+BRON_WORKSPACE_ID=<workspaceId>                 bron tx list
+BRON_API_KEY_FILE=~/.config/bron/keys/other.jwk bron tx list
+BRON_PROXY=http://user:pass@proxy:8080          bron tx list
+HTTPS_PROXY=http://proxy:8080                   bron tx list  # standard env vars are honored too
 BRON_CONFIG=/tmp/cli.yaml                       bron config show
 ```
 
@@ -198,38 +207,41 @@ Every endpoint in the OpenAPI spec becomes a command:
 bron <resource> <verb> [<positional-id>...] [--<field>...] [--file <path> | --json '{...}']
 ```
 
-- `<resource>` — first URL segment (`transactions`, `accounts`, `address-book`, …)
+- `<resource>` — first URL segment, lowercased and shortened where useful (`tx` for `transactions`, `address-book` for `address-book-records`, …)
 - `<verb>` — remaining path segments verbatim (`list`, `get`, `create`, `accept-deposit-offer`, …)
 - `{workspaceId}` is implicit (from profile or `--workspace`); other path params are positional in URL order
 - query parameters become `--<name>` flags; body fields become `--<field>` / `--<a>.<b>` flags
 
-Special case — `bron tx <type>`: shortcut for `transactions create --transactionType <type>`, with the type-specific body fields exposed as `--params.<field>`. List the available types with `bron tx --help`.
+Special case — `bron tx <type>` (e.g. `bron tx withdrawal`, `bron tx allowance`, `bron tx stake-delegation`): shortcut for `bron tx create --transactionType <type>`, with the type-specific body fields exposed as `--params.<field>`. List the available types and verbs with `bron tx --help`.
 
 ## Output formats and queries
 
 ```bash
-bron transactions list --output json     # default — pretty-printed JSON, colored on TTY
-bron transactions list --output yaml
-bron transactions list --output jsonl
-bron transactions list --output table    # nested objects collapsed to {…} / […N], cells trimmed
+bron tx list --output json     # default — pretty-printed JSON, colored on TTY
+bron tx list --output yaml
+bron tx list --output jsonl
+bron tx list --output table    # nested objects collapse to {…}/[…N], *At fields render as ISO UTC
 
 # JSONPath subset filter (no jq, no select — just navigation)
-bron transactions list      --query '.transactions[*].transactionId'
-bron transactions get <id>  --query '.status'
+bron tx list      --query '.transactions[*].transactionId'
+bron tx get <id>  --query '.status'
 bron accounts list          --output table --query '.accounts[*]'
 
-# --columns picks fields (works for json / yaml / jsonl / table) in the listed order
-bron transactions list --output table --columns transactionId,status,transactionType,createdAt
-bron transactions list --output json  --columns transactionId,status
-bron transactions get <id>            --columns transactionId,status,params
+# --columns picks fields (works for json / yaml / jsonl / table) in the listed order.
+# Supports dot-paths: table shows flat headers, json/yaml emit nested objects.
+bron tx list --output table --columns transactionId,transactionType,params.amount,params.assetId,createdAt
+bron tx list --output json  --columns transactionId,status,params.amount
+bron tx get <id>            --columns transactionId,status,params
 ```
 
 JSON output is colored when stdout is a TTY. Disable with `NO_COLOR=1`, force on with `FORCE_COLOR=1`.
 
+`bron <resource> <verb> --schema` (or `bron help <resource> <verb> --schema`) prints the JSON schema (path/query params, body, every response status) — handy for AI agents or quick API exploration.
+
 For heavier transformations, pipe to `jq`:
 
 ```bash
-bron transactions list --output json | jq '.transactions[] | select(.status=="signed")'
+bron tx list --output json | jq '.transactions[] | select(.status=="signed")'
 ```
 
 Date-shaped query parameters (names ending in `AtFrom`, `AtTo`, `Since`, `Before`, `After`) accept both ISO-8601 (`2026-04-01T00:00:00Z`, `2026-04-01`) and millisecond-epoch integers — the CLI normalizes to millis before sending.

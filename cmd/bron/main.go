@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -29,6 +30,9 @@ type globalFlags struct {
 	output    string
 	query     string
 	columns   string
+	cellMax   int
+	embed     string
+	schema    bool
 }
 
 const rootLong = `Bron CLI — public API client.
@@ -52,10 +56,10 @@ const rootExample = `  bron help
 
   bron balances list --accountId <accountId> --assetId 5000 --networkId ETH --nonEmpty true
 
-  bron transactions list --transactionStatuses waiting-approval,signing --limit 50
-  bron transactions list --transactionTypes withdrawal,allowance --createdAtFrom 2026-04-01
-  bron transactions get    <transactionId>
-  bron transactions events <transactionId>
+  bron tx list --transactionStatuses waiting-approval,signing --limit 50
+  bron tx list --transactionTypes withdrawal,allowance --createdAtFrom 2026-04-01
+  bron tx get    <transactionId>
+  bron tx events <transactionId>
 
   bron tx withdrawal \
     --accountId <accountId> \
@@ -89,15 +93,15 @@ const rootExample = `  bron help
   bron tx withdrawal --json '{"accountId":"<accountId>","params":{"amount":100,"assetId":"5000"}}'
   bron tx withdrawal --file ./tx.json --params.amount=250 --externalId <idempotencyKey>
 
-  bron transactions approve                <transactionId>
-  bron transactions decline                <transactionId>
-  bron transactions cancel                 <transactionId>
-  bron transactions create-signing-request <transactionId>
-  bron transactions accept-deposit-offer   <transactionId>
-  bron transactions reject-outgoing-offer  <transactionId>
+  bron tx approve                <transactionId>
+  bron tx decline                <transactionId>
+  bron tx cancel                 <transactionId>
+  bron tx create-signing-request <transactionId>
+  bron tx accept-deposit-offer   <transactionId>
+  bron tx reject-outgoing-offer  <transactionId>
 
   # Lower-level — when no "tx <type>" shortcut fits or you want full control:
-  bron transactions create \
+  bron tx create \
     --transactionType withdrawal \
     --accountId <accountId> \
     --externalId <idempotencyKey> \
@@ -106,13 +110,13 @@ const rootExample = `  bron help
     --params.networkId=ETH \
     --params.toAddress=<address>
 
-  bron transactions dry-run     --file ./tx.json
-  bron transactions bulk-create --file ./batch.json
+  bron tx dry-run     --file ./tx.json
+  bron tx bulk-create --file ./batch.json
 
-  bron transactions list --output yaml
-  bron transactions list --output table --columns transactionId,status,transactionType,createdAt
-  bron transactions list --output table --query '.transactions[*]'
-  bron transactions get <transactionId> --query '.status'
+  bron tx list --output yaml
+  bron tx list --output table --columns transactionId,status,transactionType,createdAt
+  bron tx list --output table --query '.transactions[*]'
+  bron tx get <transactionId> --query '.status'
 
   bron deposit-addresses list --accountId <accountId> --networkId ETH
 
@@ -149,6 +153,8 @@ const rootExample = `  bron help
 func main() {
 	gf := &globalFlags{}
 
+	output.SetDateKeys(collectDateKeysFromSpec())
+
 	root := &cobra.Command{
 		Use:           "bron <resource> <verb> [<id>...] [flags]",
 		Short:         "Bron CLI — public API client",
@@ -166,6 +172,7 @@ func main() {
 	root.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if cmd != root {
 			defaultHelp(cmd, args)
+			appendReturnsHint(cmd)
 			return
 		}
 		out := cmd.OutOrStdout()
@@ -194,18 +201,81 @@ func main() {
 	root.PersistentFlags().StringVar(&gf.output, "output", "", "output format: table|json|yaml|jsonl (default json)")
 	root.PersistentFlags().StringVar(&gf.query, "query", "", "JSONPath subset filter, e.g. .transactions[*].transactionId")
 	root.PersistentFlags().StringVar(&gf.columns, "columns", "", "comma-separated keys to keep, e.g. transactionId,status,createdAt (works for json/yaml/jsonl/table)")
+	root.PersistentFlags().IntVar(&gf.cellMax, "cell-max", 28, "max chars per table cell; 0 disables truncation")
+	root.PersistentFlags().StringVar(&gf.embed, "embed", "", "comma list of related entities to embed in the response (e.g. events,settings,permission-groups). Each token routes to the matching backend includeXxx flag if the endpoint exposes one")
+	root.PersistentFlags().BoolVar(&gf.schema, "schema", false, "print JSON schema (request + response) for the command instead of running it")
 
-	root.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		output.SetFormat(gf.output)
 		output.SetQuery(gf.query)
 		output.SetColumns(gf.columns)
+		output.SetCellMax(gf.cellMax)
+		applyEmbed(cmd, gf.embed)
+		// --schema on an api command → emit JSON schema instead of running.
+		if gf.schema {
+			r, v, ok := resourceVerbFor(cmd)
+			if !ok {
+				return nil
+			}
+			entry, ok := lookupEntry(r, v)
+			if !ok {
+				return fmt.Errorf("no schema found for `bron %s %s`", r, v)
+			}
+			doc, err := buildCommandHelpDoc(r, v, entry)
+			if err != nil {
+				return err
+			}
+			// `bron tx <type> --schema` should reflect the discriminator-specific
+			// body shape, not the generic CreateTransaction wrapper. Swap the
+			// free-form `params` blob with the matching <Type>Params schema and
+			// pin transactionType in the body so machine consumers see the
+			// concrete request shape.
+			if parent := cmd.Parent(); parent != nil && parent.Name() == "tx" {
+				if sc, ok := generated.TxShortcuts[cmd.Name()]; ok && sc.ParamsRef != "" {
+					specializeTxBody(doc, cmd.Name(), sc.ParamsRef)
+					doc["usage"] = "bron tx " + cmd.Name()
+					doc["command"] = "tx " + cmd.Name()
+				}
+			}
+			if err := output.Print(doc); err != nil {
+				return err
+			}
+			os.Exit(0)
+		}
+		return nil
 	}
 
 	generated.Register(root, func() (*client.Client, error) { return buildClient(gf) })
 
+	// --schema short-circuits the verb command, but cobra validates Args before
+	// PersistentPreRun. Wrap each api-group cmd's Args so it is bypassed when
+	// --schema is set, allowing `bron tx get --schema` to skip the
+	// "transactionId required" check.
+	walkAPICommands(root, func(c *cobra.Command) {
+		orig := c.Args
+		c.Args = func(c *cobra.Command, args []string) error {
+			if gf.schema {
+				return nil
+			}
+			if orig == nil {
+				return nil
+			}
+			return orig(c, args)
+		}
+	})
+
 	helpCmd := newHelpCmd()
 	helpCmd.GroupID = "system"
 	root.SetHelpCommand(helpCmd)
+
+	// `bron tx subscribe` — WebSocket prototype, hand-written. Attach as a child
+	// of the generated `tx` resource so it sits next to the regular verbs.
+	for _, c := range root.Commands() {
+		if c.Name() == "tx" {
+			c.AddCommand(newTxSubscribeCmd(gf))
+			break
+		}
+	}
 
 	authCmd := newAuthCmd()
 	authCmd.GroupID = "system"
@@ -226,8 +296,15 @@ func main() {
 	if err := root.Execute(); err != nil {
 		var apiErr *sdkhttp.APIError
 		if errors.As(err, &apiErr) {
-			fmt.Fprintf(os.Stderr, "error: %s (status=%d code=%s requestID=%s)\n",
-				apiErr.Message, apiErr.Status, apiErr.Code, apiErr.RequestID)
+			fmt.Fprintf(os.Stderr, "error: %s\n", apiErr.Message)
+			fmt.Fprintf(os.Stderr, "  status:   %d\n", apiErr.Status)
+			if apiErr.Code != "" {
+				fmt.Fprintf(os.Stderr, "  code:     %s\n", apiErr.Code)
+			}
+			if apiErr.RequestID != "" {
+				fmt.Fprintf(os.Stderr, "  trace:    %s\n", apiErr.RequestID)
+				fmt.Fprintln(os.Stderr, "  (paste the trace ID into a support ticket — the backend logs it as Error ID)")
+			}
 			os.Exit(exitCodeForStatus(apiErr.Status))
 		}
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -261,24 +338,27 @@ func buildClient(gf *globalFlags) (*client.Client, error) {
 
 // newHelpCmd replaces cobra's default help command. Modes:
 //
-//	bron help                          — print root usage (cobra default behavior)
+//	bron help                          — print root usage (cobra default)
+//	bron help <topic>                  — print a topic blurb (signing, profiles, output, …)
 //	bron help <resource>               — print resource subcommands (cobra default)
-//	bron help <resource> <verb>        — agent-friendly help for one command: usage + flags +
-//	                                     body schema + response schema (--output json|yaml).
-//	bron help --schema                 — dump the full CLI schema (every command + tx shortcut +
-//	                                     referenced types) as a single document for agents.
+//	bron help <resource> <verb>        — same as `bron <resource> <verb> --help` (cobra-style text)
+//	bron help <resource> <verb> --schema — JSON/YAML schema dump (request + response schema)
+//	bron help --schema                 — dump the full CLI schema as one document
+//
+// `--schema` is the global root flag, so `bron <resource> <verb> --schema`
+// produces the same dump as `bron help <resource> <verb> --schema`.
 func newHelpCmd() *cobra.Command {
-	var dumpSpec bool
 	cmd := &cobra.Command{
-		Use:   "help [resource] [verb]",
-		Short: "Help about any command (with agent-friendly schema dump for `help <resource> <verb>`)",
+		Use:   "help [resource|topic] [verb]",
+		Short: "Help about any command. Add --schema for a machine-readable JSON dump.",
 		Long: "Without arguments — prints CLI usage.\n" +
-			"With <resource> <verb> — prints usage signature, flags, body schema, response schema\n" +
-			"in the format selected by --output (json default, yaml supported).\n" +
-			"With --schema — dumps the full CLI schema (commands, tx shortcuts, referenced types).",
+			"With <topic> — prints the named topic blurb (`bron help topics` for the list).\n" +
+			"With <resource> <verb> — prints the same text as `bron <resource> <verb> --help`.\n" +
+			"With --schema — dumps the full CLI schema (without args) or a per-command schema (with <resource> <verb>).",
 		DisableFlagParsing: false,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if dumpSpec {
+			schema, _ := cmd.Root().PersistentFlags().GetBool("schema")
+			if schema && len(args) < 2 {
 				doc, err := buildFullSchemaDoc()
 				if err != nil {
 					return err
@@ -298,25 +378,24 @@ func newHelpCmd() *cobra.Command {
 					return nil
 				}
 			}
-			if len(args) < 2 {
-				target, _, err := cmd.Root().Find(args)
-				if err != nil || target == nil {
-					return cmd.Root().Help()
+			if len(args) >= 2 && schema {
+				entry, ok := lookupEntry(args[0], args[1])
+				if !ok {
+					return fmt.Errorf("unknown command: bron %s %s", args[0], args[1])
 				}
-				return target.Help()
+				doc, err := buildCommandHelpDoc(args[0], args[1], entry)
+				if err != nil {
+					return err
+				}
+				return output.Print(doc)
 			}
-			entry, ok := lookupEntry(args[0], args[1])
-			if !ok {
-				return fmt.Errorf("unknown command: bron %s %s", args[0], args[1])
+			target, _, err := cmd.Root().Find(args)
+			if err != nil || target == nil {
+				return cmd.Root().Help()
 			}
-			doc, err := buildCommandHelpDoc(args[0], args[1], entry)
-			if err != nil {
-				return err
-			}
-			return output.Print(doc)
+			return target.Help()
 		},
 	}
-	cmd.Flags().BoolVar(&dumpSpec, "schema", false, "dump the full CLI schema (every command + tx shortcut + types) — machine-readable")
 	return cmd
 }
 
@@ -422,6 +501,278 @@ func buildFullSchemaDoc() (map[string]interface{}, error) {
 	}, nil
 }
 
+// appendReturnsHint prints a "Returns:" block at the bottom of help output for
+// api verb commands. It lists top-level properties of the response schema with
+// type and short description, expanding inline-arrays-of-refs by one level so
+// list endpoints show the item shape directly. For `bron tx <type>` it also
+// prints a `Body params: <Type>Params` block so the discriminator-specific
+// shape is visible alongside the generic CreateTransaction wrapper.
+func appendReturnsHint(cmd *cobra.Command) {
+	r, v, ok := resourceVerbFor(cmd)
+	if !ok {
+		return
+	}
+	entry, ok := lookupEntry(r, v)
+	if !ok {
+		return
+	}
+	out := cmd.OutOrStdout()
+
+	// `bron tx <type>` flag list already exposes --params.<...>, but a compact
+	// Body block summarises the chosen Params class with types/descriptions/
+	// examples in the same shape as Returns — handy reference next to the flags.
+	if parent := cmd.Parent(); parent != nil && parent.Name() == "tx" {
+		if sc, ok := generated.TxShortcuts[cmd.Name()]; ok && sc.ParamsRef != "" {
+			fmt.Fprintf(out, "\nBody params: %s\n", sc.ParamsRef)
+			printProps(out, topLevelProps(sc.ParamsRef, false), "  ")
+		}
+	}
+
+	if entry.ResponseRef == "" {
+		fmt.Fprintf(out, "\nFull schema: bron %s %s --schema\n", r, v)
+		return
+	}
+
+	props := topLevelProps(entry.ResponseRef, true)
+	fmt.Fprintf(out, "\nReturns: %s\n", entry.ResponseRef)
+	printProps(out, props, "  ")
+	fmt.Fprintf(out, "\nFull schema: bron %s %s --schema\n", r, v)
+}
+
+type schemaProp struct {
+	name, typ, desc, example string
+	sub                      []schemaProp // populated for `<Ref>[]` properties (one level deep)
+}
+
+func printProps(out io.Writer, props []schemaProp, indent string) {
+	if len(props) == 0 {
+		return
+	}
+	nameWidth, typeWidth := 0, 0
+	for _, p := range props {
+		if l := len(p.name); l > nameWidth {
+			nameWidth = l
+		}
+		if l := len(p.typ); l > typeWidth {
+			typeWidth = l
+		}
+	}
+	for _, p := range props {
+		desc := p.desc
+		if p.example != "" {
+			if desc == "" {
+				desc = "(e.g. " + p.example + ")"
+			} else {
+				desc = desc + " (e.g. " + p.example + ")"
+			}
+		}
+		if desc == "" {
+			fmt.Fprintf(out, "%s%-*s  %s\n", indent, nameWidth, p.name, p.typ)
+		} else {
+			fmt.Fprintf(out, "%s%-*s  %-*s  %s\n", indent, nameWidth, p.name, typeWidth, p.typ, desc)
+		}
+		if len(p.sub) > 0 {
+			printProps(out, p.sub, indent+"  ")
+		}
+	}
+}
+
+// topLevelProps returns the top-level properties of a named schema. When
+// expandArrays is true, properties shaped `<Ref>[]` get their sub items'
+// properties expanded one level deep (used to flesh out list endpoints
+// like `transactions: Transaction[]` → show Transaction's fields).
+func topLevelProps(name string, expandArrays bool) []schemaProp {
+	if name == "" {
+		return nil
+	}
+	v, err := resolveRef(name)
+	if err != nil {
+		return nil
+	}
+	m, ok := v.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	props, _ := m["properties"].(map[string]interface{})
+	keys := make([]string, 0, len(props))
+	for k := range props {
+		keys = append(keys, k)
+	}
+	sortStrings(keys)
+	out := make([]schemaProp, 0, len(keys))
+	for _, k := range keys {
+		pm, _ := props[k].(map[string]interface{})
+		sp := schemaProp{
+			name:    k,
+			typ:     schemaTypeLabel(pm),
+			desc:    firstLine(asString(pm["description"])),
+			example: firstExample(pm),
+		}
+		if expandArrays {
+			if t, _ := pm["type"].(string); t == "array" {
+				if items, ok := pm["items"].(map[string]interface{}); ok {
+					if ref, _ := items["$ref"].(string); ref != "" {
+						inner := strings.TrimPrefix(ref, "#/components/schemas/")
+						if inner != name {
+							sp.sub = topLevelProps(inner, false)
+						}
+					}
+				}
+			}
+		}
+		out = append(out, sp)
+	}
+	return out
+}
+
+// firstExample picks one example from an OpenAPI schema property. Supports both
+// `example: "..."` and `examples: ["...", ...]` shapes. Returns "" when neither
+// is set. DocsMacro emits string examples only — the spec never carries
+// non-string example shapes today, so we don't bother with json.Marshal fallbacks.
+func firstExample(pm map[string]interface{}) string {
+	if v, ok := pm["example"].(string); ok && v != "" {
+		return v
+	}
+	if arr, ok := pm["examples"].([]interface{}); ok {
+		for _, x := range arr {
+			if s, ok := x.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func schemaTypeLabel(m map[string]interface{}) string {
+	if m == nil {
+		return ""
+	}
+	if ref, ok := m["$ref"].(string); ok {
+		return strings.TrimPrefix(ref, "#/components/schemas/")
+	}
+	t, _ := m["type"].(string)
+	if t == "array" {
+		if items, ok := m["items"].(map[string]interface{}); ok {
+			return schemaTypeLabel(items) + "[]"
+		}
+		return "array"
+	}
+	if format, _ := m["format"].(string); format != "" && t != "" {
+		return t + "(" + format + ")"
+	}
+	if t == "" {
+		if _, ok := m["properties"]; ok {
+			return "object"
+		}
+		return ""
+	}
+	return t
+}
+
+func asString(v interface{}) string {
+	s, _ := v.(string)
+	return s
+}
+
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i]
+	}
+	const max = 120
+	if len([]rune(s)) > max {
+		r := []rune(s)
+		return string(r[:max-1]) + "…"
+	}
+	return s
+}
+
+func sortStrings(s []string) {
+	sort.Strings(s)
+}
+
+// walkAPICommands invokes fn on every cobra command tagged with GroupID="api"
+// (resource cmds and their verb children, plus the `tx <type>` shortcuts).
+// `tx` itself has GroupID="api", so its children are picked up by the
+// parent-GroupID check — no need to special-case the parent's name.
+func walkAPICommands(root *cobra.Command, fn func(*cobra.Command)) {
+	var walk func(*cobra.Command)
+	walk = func(c *cobra.Command) {
+		if c.GroupID == "api" || (c.Parent() != nil && c.Parent().GroupID == "api") {
+			fn(c)
+		}
+		for _, child := range c.Commands() {
+			walk(child)
+		}
+	}
+	for _, child := range root.Commands() {
+		walk(child)
+	}
+}
+
+// resourceVerbFor maps an api-group cobra cmd to (resource, verb) for schema
+// lookup. Handles bare verb commands (`bron tx get`), `bron tx <type>` create
+// shortcuts (collapse to `tx create`), and resource commands with a default
+// verb (`bron accounts` → list).
+func resourceVerbFor(cmd *cobra.Command) (string, string, bool) {
+	if cmd == nil {
+		return "", "", false
+	}
+	parent := cmd.Parent()
+	if parent != nil && parent.Name() == "tx" {
+		// Either a real tx verb (`tx get`, `tx list`) or a transactionType
+		// create-shortcut (`tx withdrawal`). Shortcuts collapse to `tx create`
+		// so help and --schema reflect the underlying endpoint.
+		if _, isShortcut := generated.TxShortcuts[cmd.Name()]; isShortcut {
+			return "tx", "create", true
+		}
+		return "tx", cmd.Name(), true
+	}
+	if parent != nil && parent.GroupID == "api" {
+		return parent.Name(), cmd.Name(), true
+	}
+	if cmd.GroupID == "api" {
+		// Resource cmd (e.g. `bron accounts` aliased to list).
+		return cmd.Name(), "list", true
+	}
+	return "", "", false
+}
+
+// applyEmbed routes each token from --embed to a matching includeXxx flag on
+// the command. Tokens are kebab-case and get camelised: "permission-groups" →
+// "includePermissionGroups". Unknown tokens print a stderr warning naming the
+// missing flag — silent no-ops are hard to debug for typos like "settngs".
+func applyEmbed(cmd *cobra.Command, embed string) {
+	if embed == "" {
+		return
+	}
+	for _, tok := range strings.Split(embed, ",") {
+		tok = strings.TrimSpace(tok)
+		if tok == "" {
+			continue
+		}
+		var camel strings.Builder
+		upNext := true
+		for _, r := range tok {
+			if r == '-' || r == '_' {
+				upNext = true
+				continue
+			}
+			if upNext && r >= 'a' && r <= 'z' {
+				camel.WriteRune(r - 'a' + 'A')
+			} else {
+				camel.WriteRune(r)
+			}
+			upNext = false
+		}
+		flagName := "include" + camel.String()
+		if f := cmd.Flags().Lookup(flagName); f != nil {
+			_ = cmd.Flags().Set(flagName, "true")
+			continue
+		}
+		fmt.Fprintf(os.Stderr, "warning: --embed token %q has no matching --%s flag on `bron %s`\n", tok, flagName, cmd.CommandPath())
+	}
+}
+
 func lookupEntry(resource, verb string) (generated.HelpEntry, bool) {
 	verbs, ok := generated.HelpEntries[resource]
 	if !ok {
@@ -505,6 +856,68 @@ func buildCommandHelpDoc(resource, verb string, entry generated.HelpEntry) (map[
 		doc["body"] = body
 	}
 	return doc, nil
+}
+
+// collectDateKeysFromSpec scans the embedded OpenAPI spec for property names
+// whose schema declares `format: "date-time-millis"` and returns them as a set.
+// Output formatters use the set to humanize epoch-millis values to ISO-8601 UTC.
+//
+// One level of properties per top-level component schema is sufficient:
+// `@EpochMillis` is applied directly on Long fields in datamodel DTOs, each
+// DTO becomes its own component, and timestamp field names (createdAt,
+// expiresAt, etc.) are unique enough across the API that name-only matching
+// has no false positives. If a future change nests EpochMillis fields deeper
+// (e.g. inside an inline object property), expand this scan.
+func collectDateKeysFromSpec() map[string]bool {
+	keys := map[string]bool{}
+	var spec struct {
+		Components struct {
+			Schemas map[string]struct {
+				Properties map[string]struct {
+					Format string `json:"format"`
+					Items  struct {
+						Format string `json:"format"`
+					} `json:"items"`
+				} `json:"properties"`
+			} `json:"schemas"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(generated.Spec, &spec); err != nil {
+		return keys
+	}
+	for _, schema := range spec.Components.Schemas {
+		for name, prop := range schema.Properties {
+			if prop.Format == "date-time-millis" || prop.Items.Format == "date-time-millis" {
+				keys[name] = true
+			}
+		}
+	}
+	return keys
+}
+
+// specializeTxBody mutates the schema doc for `bron tx <type> --schema` so the
+// body reflects the specific transactionType — pin the discriminator and
+// replace the free-form `params: ObjectNode` blob with the matching
+// <Type>Params schema. Best-effort; leaves doc untouched if anything is
+// missing or shaped unexpectedly.
+func specializeTxBody(doc map[string]interface{}, txType, paramsRef string) {
+	body, ok := doc["body"].(map[string]interface{})
+	if !ok {
+		return
+	}
+	props, ok := body["properties"].(map[string]interface{})
+	if !ok {
+		return
+	}
+	props["transactionType"] = map[string]interface{}{
+		"type":    "string",
+		"enum":    []interface{}{txType},
+		"example": txType,
+	}
+	paramsSchema, err := resolveRef(paramsRef)
+	if err == nil && paramsSchema != nil {
+		props["params"] = paramsSchema
+	}
 }
 
 // lookupOperation pulls the operation node for a (method, path) pair from the

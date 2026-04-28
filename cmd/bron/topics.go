@@ -55,7 +55,8 @@ by a small JSONPath subset and/or a column list.
   --output json   (default)   pretty-printed JSON, colored on TTY
   --output yaml               YAML
   --output jsonl              one JSON document per line (good for piping)
-  --output table              aligned columns; nested objects collapse to {…} / […N], cells trimmed
+  --output table              aligned columns; nested objects collapse to {…} / […N], cells trimmed.
+                              *At / *Time fields with epoch-millis values render as ISO UTC.
 
   --query .path[*].field      JSONPath subset:
       .foo.bar          object key (nested)
@@ -66,17 +67,20 @@ by a small JSONPath subset and/or a column list.
   --columns id,status,...     comma-separated key list to keep, in the listed order.
                               Works for json / yaml / jsonl / table. For list-shape responses
                               (e.g. {"transactions":[…]}) it narrows each element.
+                              Supports dot-paths: --columns transactionId,params.amount,params.assetId
+                                — table renders as flat headers ("params.amount"),
+                                  json/yaml emit nested objects ({"params":{"amount":…}}).
 
 JSON colors: NO_COLOR=1 disables, FORCE_COLOR=1 forces on.
 
 Heavier transformations: pipe to jq.
 
-  bron transactions list --output json | jq '.transactions[] | select(.status=="signed")'
+  bron tx list --output json | jq '.transactions[] | select(.status=="signed")'
 
 Examples:
-  bron transactions list --output table --columns transactionId,status,transactionType,createdAt
-  bron transactions list --output json  --columns transactionId,status
-  bron transactions get <id>            --columns transactionId,status,params
+  bron tx list --output table --columns transactionId,transactionType,params.amount,params.assetId,createdAt
+  bron tx list --output json  --columns transactionId,status,params.amount
+  bron tx get <id>            --columns transactionId,status,params
 
 Reference: https://docs.bron.org/cli/output`,
 
@@ -130,6 +134,38 @@ instead of creating a new one.
 Without externalId, retries can double-spend. Always set it for write operations.
 
 Reference: https://docs.bron.org/api/idempotency`,
+
+	"addresses": `Addresses — picking a recipient on a withdrawal
+
+Withdrawal-style transactions accept four mutually-exclusive recipient fields under
+` + "`params`" + `. Pick the one that fits your use case:
+
+  --params.toAddress=<rawAddress>           on-chain address; you take all responsibility
+                                             for the format and the receiving network.
+  --params.toAddressBookRecordId=<recordId> use a saved address-book entry. Bron resolves
+                                             the actual address + memo + network from the
+                                             record, so a typo in --params.toAddress is no
+                                             longer possible. List entries with
+                                             "bron address-book list".
+  --params.toAccountId=<accountId>          internal transfer between two of your accounts.
+                                             No on-chain fee path; instant.
+  --params.toWorkspaceTag=<tag>             route to another Bron workspace by its tag
+                                             (e.g. "tesla" → routes to that workspace).
+
+Examples:
+  bron tx withdrawal --accountId <accId> --externalId <idem> \
+    --params.amount=100 --params.assetId=20145 --params.networkId=ethereum \
+    --params.toAddressBookRecordId=a30lin1p2zr1wzqqt1l8n652
+
+  bron tx withdrawal --accountId <accId> --externalId <idem> \
+    --params.amount=10  --params.assetId=20145 --params.networkId=ethereum \
+    --params.toAccountId=w9jh0gf3w9qaxlre7enezt17
+
+  bron tx withdrawal --accountId <accId> --externalId <idem> \
+    --params.amount=5   --params.assetId=20145 --params.networkId=ethereum \
+    --params.toWorkspaceTag=tesla
+
+Reference: https://docs.bron.org/api/withdrawals`,
 
 	"agents": `Agents — using bron from LLMs and scripts
 

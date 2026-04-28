@@ -17,6 +17,7 @@ import (
 var resourceAliases = map[string]string{
 	"address-book-records": "address-book",
 	"addresses":            "deposit-addresses",
+	"transactions":         "tx",
 }
 
 // endpointAliases — full (method,path) overrides for endpoints that logically
@@ -117,10 +118,10 @@ var Spec []byte
 // --- tx <type> shortcuts ---
 
 type txShortcut struct {
-	Key       string   // "withdrawal", "stake-delegation"
-	Class     string   // "WithdrawalParams"
-	TopFields []string // CreateTransaction top-level fields except transactionType and params
-	Params    []string // dot-paths under "params." (without prefix)
+	Key       string      // "withdrawal", "stake-delegation"
+	Class     string      // "WithdrawalParams"
+	TopFields []bodyField // CreateTransaction top-level fields except transactionType and params
+	Params    []bodyField // leaves under "params." (without prefix)
 }
 
 // txKeyOverrides handles class→key mismatches that the algorithm can't infer.
@@ -128,6 +129,11 @@ type txShortcut struct {
 var txKeyOverrides = map[string]string{
 	"StakeUnDelegationParams": "stake-undelegation",
 }
+
+// reservedTxNames are hand-written children of `bron tx` that live in
+// cmd/bron/main.go (e.g. `bron tx subscribe`). Listed here so the conflict
+// guard fails generation if a future transactionType key collides with one.
+var reservedTxNames = []string{"subscribe"}
 
 func collectTxShortcuts(spec rawSpec) []txShortcut {
 	reg := spec.Components.Schemas
@@ -150,17 +156,21 @@ func collectTxShortcuts(spec rawSpec) []txShortcut {
 
 	// Collect top-level fields that are scalars/arrays — skip transactionType (fixed by shortcut)
 	// and skip params (handled per shortcut below).
-	var topFields []string
+	var topFields []bodyField
 	for name, prop := range create.Properties {
 		if name == "transactionType" || name == "params" {
 			continue
 		}
 		switch propKind(prop, reg) {
-		case "scalar", "array":
-			topFields = append(topFields, name)
+		case "scalar":
+			t, f := leafTypeFormat(prop, reg)
+			topFields = append(topFields, bodyField{DotPath: name, Type: t, Format: f, Description: strings.TrimSpace(prop.Description)})
+		case "array":
+			t, f := arrayItemTypeFormat(prop, reg)
+			topFields = append(topFields, bodyField{DotPath: name, Type: t + "[]", Format: f, Description: strings.TrimSpace(prop.Description)})
 		}
 	}
-	sort.Strings(topFields)
+	sort.Slice(topFields, func(i, j int) bool { return topFields[i].DotPath < topFields[j].DotPath })
 
 	paramsProp, ok := create.Properties["params"]
 	if !ok || len(paramsProp.OneOf) == 0 {
@@ -240,10 +250,11 @@ type rawResponse struct {
 }
 
 type rawParam struct {
-	Name     string     `json:"name"`
-	In       string     `json:"in"`
-	Required bool       `json:"required"`
-	Schema   *rawSchema `json:"schema"`
+	Name        string     `json:"name"`
+	In          string     `json:"in"`
+	Required    bool       `json:"required"`
+	Description string     `json:"description"`
+	Schema      *rawSchema `json:"schema"`
 }
 
 type rawReqBody struct {
@@ -255,15 +266,17 @@ type rawContent struct {
 }
 
 type rawSchema struct {
-	Type       string               `json:"type"`
-	Ref        string               `json:"$ref"`
-	Properties map[string]rawSchema `json:"properties"`
-	Required   []string             `json:"required"`
-	Items      *rawSchema           `json:"items"`
-	OneOf      []rawSchema          `json:"oneOf"`
-	AnyOf      []rawSchema          `json:"anyOf"`
-	AllOf      []rawSchema          `json:"allOf"`
-	Enum       []interface{}        `json:"enum"`
+	Type        string               `json:"type"`
+	Format      string               `json:"format"`
+	Description string               `json:"description"`
+	Ref         string               `json:"$ref"`
+	Properties  map[string]rawSchema `json:"properties"`
+	Required    []string             `json:"required"`
+	Items       *rawSchema           `json:"items"`
+	OneOf       []rawSchema          `json:"oneOf"`
+	AnyOf       []rawSchema          `json:"anyOf"`
+	AllOf       []rawSchema          `json:"allOf"`
+	Enum        []interface{}        `json:"enum"`
 }
 
 // --- planning ---
@@ -276,15 +289,28 @@ type plannedCmd struct {
 	Summary     string   // OpenAPI operation.summary, used as the cobra Short description
 	PathArgs    []string // names from URL placeholders, in order
 	QueryParams []param
-	BodyFields  []string // dot-paths for --<flag> body field overlay (skips oneOf)
+	BodyFields  []bodyField // leaves of the request body schema (skips oneOf)
 	HasBody     bool
 	BodyRef     string // component name of request body schema (e.g. "CreateTransaction")
 	ResponseRef string // component name of 200/201 response schema (e.g. "Transactions")
 }
 
 type param struct {
-	Name     string
-	Required bool
+	Name        string
+	Required    bool
+	Type        string // OpenAPI type: "string" | "integer" | "boolean" | "array"
+	Format      string // OpenAPI format: "int64" | "date-time-millis" | "decimal" | ...
+	Description string
+}
+
+// bodyField is a body-schema leaf carrying its OpenAPI type/format/description.
+// Type info drives the cobra flag's help string so users see the underlying shape
+// (`[int64]`, `[date-time-millis]`, `[decimal]`) instead of a bare `string`.
+type bodyField struct {
+	DotPath     string
+	Type        string
+	Format      string
+	Description string
 }
 
 func buildPlan(spec rawSpec) ([]plannedCmd, error) {
@@ -305,7 +331,18 @@ func buildPlan(spec rawSpec) ([]plannedCmd, error) {
 			cmd.Summary = strings.TrimSpace(op.Summary)
 			for _, p := range op.Parameters {
 				if p.In == "query" {
-					cmd.QueryParams = append(cmd.QueryParams, param{Name: p.Name, Required: p.Required})
+					qp := param{Name: p.Name, Required: p.Required, Description: strings.TrimSpace(p.Description)}
+					if p.Schema != nil {
+						qp.Type = p.Schema.Type
+						qp.Format = p.Schema.Format
+						if qp.Type == "array" && p.Schema.Items != nil && p.Schema.Items.Type != "" {
+							qp.Type = p.Schema.Items.Type + "[]"
+							if p.Schema.Items.Format != "" {
+								qp.Format = p.Schema.Items.Format
+							}
+						}
+					}
+					cmd.QueryParams = append(cmd.QueryParams, qp)
 				}
 			}
 			if op.RequestBody != nil {
@@ -439,18 +476,19 @@ func tail(s string) string {
 
 // --- schema walking ---
 
-// collectLeaves returns the dot-paths of every scalar/array leaf reachable from schema.
-// Refs are resolved via registry. oneOf/anyOf branches are skipped (no discriminator,
-// can't pick a shape). allOf is treated as union of properties.
-func collectLeaves(s rawSchema, prefix string, reg map[string]rawSchema) []string {
-	var out []string
+// collectLeaves returns every scalar/array leaf reachable from schema, with the
+// dot-path plus the leaf's OpenAPI type/format/description. Refs are resolved via
+// registry. oneOf/anyOf branches are skipped (no discriminator, can't pick a
+// shape). allOf is treated as union of properties.
+func collectLeaves(s rawSchema, prefix string, reg map[string]rawSchema) []bodyField {
+	var out []bodyField
 	visited := map[string]bool{}
 	walkLeaves(s, prefix, reg, visited, &out)
-	sort.Strings(out)
+	sort.Slice(out, func(i, j int) bool { return out[i].DotPath < out[j].DotPath })
 	return out
 }
 
-func walkLeaves(s rawSchema, prefix string, reg map[string]rawSchema, visited map[string]bool, out *[]string) {
+func walkLeaves(s rawSchema, prefix string, reg map[string]rawSchema, visited map[string]bool, out *[]bodyField) {
 	if s.Ref != "" {
 		name := refName(s.Ref)
 		if visited[name] {
@@ -472,12 +510,42 @@ func walkLeaves(s rawSchema, prefix string, reg map[string]rawSchema, visited ma
 			dot = prefix + "." + name
 		}
 		switch propKind(prop, reg) {
-		case "scalar", "array":
-			*out = append(*out, dot)
+		case "scalar":
+			t, f := leafTypeFormat(prop, reg)
+			*out = append(*out, bodyField{DotPath: dot, Type: t, Format: f, Description: strings.TrimSpace(prop.Description)})
+		case "array":
+			t, f := arrayItemTypeFormat(prop, reg)
+			*out = append(*out, bodyField{DotPath: dot, Type: t + "[]", Format: f, Description: strings.TrimSpace(prop.Description)})
 		case "object":
 			walkLeaves(prop, dot, reg, visited, out)
 		}
 	}
+}
+
+// leafTypeFormat resolves a scalar property's (type, format), following $ref to
+// pick up the underlying primitive (e.g. enum schemas surface as `string`).
+func leafTypeFormat(s rawSchema, reg map[string]rawSchema) (string, string) {
+	if s.Ref != "" {
+		ref := reg[refName(s.Ref)]
+		t := ref.Type
+		if t == "" {
+			t = "string"
+		}
+		return t, ref.Format
+	}
+	t := s.Type
+	if t == "" {
+		t = "string"
+	}
+	return t, s.Format
+}
+
+// arrayItemTypeFormat extracts the (item-type, item-format) for an array prop.
+func arrayItemTypeFormat(s rawSchema, reg map[string]rawSchema) (string, string) {
+	if s.Items == nil {
+		return "string", ""
+	}
+	return leafTypeFormat(*s.Items, reg)
 }
 
 func propKind(s rawSchema, reg map[string]rawSchema) string {
@@ -531,12 +599,36 @@ func emit(plan []plannedCmd, shortcuts []txShortcut) ([]byte, error) {
 	fmt.Fprintln(&b, "// Register attaches all generated subcommands to root.")
 	fmt.Fprintln(&b, "func Register(root *cobra.Command, provide ClientProvider) {")
 
-	for _, g := range groupByResource(plan) {
-		emitResourceGroup(&b, g, "provide")
+	// Conflict guard: every tx-shortcut key must be distinct from every
+	// `bron tx <verb>` name AND every hand-written `tx <name>` child registered
+	// in cmd/bron/main.go. They all live under the same parent now (no separate
+	// `bron transactions` root), so a future spec change adding a transactionType
+	// called "list" or "subscribe" must fail at gen time.
+	verbsByResource := map[string]map[string]bool{}
+	for _, c := range plan {
+		if verbsByResource[c.Resource] == nil {
+			verbsByResource[c.Resource] = map[string]bool{}
+		}
+		verbsByResource[c.Resource][c.Verb] = true
+	}
+	for _, name := range reservedTxNames {
+		if verbsByResource["tx"] == nil {
+			verbsByResource["tx"] = map[string]bool{}
+		}
+		verbsByResource["tx"][name] = true
+	}
+	for _, s := range shortcuts {
+		if verbsByResource["tx"][s.Key] {
+			return nil, fmt.Errorf("transactionType %q collides with `bron tx %s` verb — pick a different transactionType key or rename the verb", s.Key, s.Key)
+		}
 	}
 
-	if len(shortcuts) > 0 {
-		emitTxSubtree(&b, shortcuts, "provide")
+	for _, g := range groupByResource(plan) {
+		if g.Name == "tx" {
+			emitResourceGroup(&b, g, "provide", shortcuts)
+		} else {
+			emitResourceGroup(&b, g, "provide", nil)
+		}
 	}
 
 	fmt.Fprintln(&b, "}")
@@ -571,7 +663,7 @@ func groupByResource(plan []plannedCmd) []resourceGroup {
 	return groups
 }
 
-func emitResourceGroup(b *bytes.Buffer, g resourceGroup, provideVar string) {
+func emitResourceGroup(b *bytes.Buffer, g resourceGroup, provideVar string, shortcuts []txShortcut) {
 	verbs := make([]string, len(g.Commands))
 	hasList := false
 	for i, c := range g.Commands {
@@ -584,10 +676,18 @@ func emitResourceGroup(b *bytes.Buffer, g resourceGroup, provideVar string) {
 	// single row, so always include the resource name to keep them
 	// unique — "get, list — balances" vs "get, list — accounts".
 	short := strings.Join(verbs, ", ") + " — " + g.Name
+	if len(shortcuts) > 0 {
+		short += "; create-shortcut: " + strings.Join(shortcutKeys(shortcuts), ", ")
+	}
 	fmt.Fprintln(b, "\t{")
 	fmt.Fprintf(b, "\t\tres := &cobra.Command{Use: %q, Short: %q, GroupID: \"api\"}\n", g.Name, short)
 	for _, c := range g.Commands {
 		emitCommand(b, c, provideVar)
+	}
+	// For `tx`, also fold in the per-transactionType create shortcuts so the
+	// command is one mental space — `bron tx list`, `bron tx withdrawal`, ...
+	for _, s := range shortcuts {
+		emitTxShortcut(b, s, provideVar)
 	}
 
 	// `bron <resource>` with no verb: default to `list` if available, otherwise
@@ -612,6 +712,14 @@ func emitResourceGroup(b *bytes.Buffer, g resourceGroup, provideVar string) {
 	fmt.Fprintln(b, "\t}")
 }
 
+func shortcutKeys(s []txShortcut) []string {
+	keys := make([]string, len(s))
+	for i, sc := range s {
+		keys[i] = sc.Key
+	}
+	return keys
+}
+
 func emitCommand(b *bytes.Buffer, c plannedCmd, provideVar string) {
 	fmt.Fprintln(b, "\t\t{")
 
@@ -620,7 +728,7 @@ func emitCommand(b *bytes.Buffer, c plannedCmd, provideVar string) {
 		fmt.Fprintf(b, "\t\t\tvar q_%s string\n", goSafeIdent(q.Name))
 	}
 	for _, f := range c.BodyFields {
-		fmt.Fprintf(b, "\t\t\tvar f_%s string\n", goSafeIdent(f))
+		fmt.Fprintf(b, "\t\t\tvar f_%s string\n", goSafeIdent(f.DotPath))
 	}
 	if c.HasBody {
 		fmt.Fprintln(b, "\t\t\tvar fileFlag string")
@@ -668,7 +776,7 @@ func emitCommand(b *bytes.Buffer, c plannedCmd, provideVar string) {
 		if len(c.BodyFields) > 0 {
 			fmt.Fprintln(b, "\t\t\t\t\tfields := map[string]string{")
 			for _, f := range c.BodyFields {
-				fmt.Fprintf(b, "\t\t\t\t\t\t%q: f_%s,\n", f, goSafeIdent(f))
+				fmt.Fprintf(b, "\t\t\t\t\t\t%q: f_%s,\n", f.DotPath, goSafeIdent(f.DotPath))
 			}
 			fmt.Fprintln(b, "\t\t\t\t\t}")
 		} else {
@@ -707,12 +815,12 @@ func emitCommand(b *bytes.Buffer, c plannedCmd, provideVar string) {
 
 	// Flag bindings.
 	for _, q := range c.QueryParams {
-		fmt.Fprintf(b, "\t\t\tcmd.Flags().StringVar(&q_%s, %q, \"\", \"\")\n",
-			goSafeIdent(q.Name), q.Name)
+		fmt.Fprintf(b, "\t\t\tcmd.Flags().StringVar(&q_%s, %q, \"\", %q)\n",
+			goSafeIdent(q.Name), q.Name, flagHelp(q.Type, q.Format, q.Description, q.Required))
 	}
 	for _, f := range c.BodyFields {
-		fmt.Fprintf(b, "\t\t\tcmd.Flags().StringVar(&f_%s, %q, \"\", \"\")\n",
-			goSafeIdent(f), f)
+		fmt.Fprintf(b, "\t\t\tcmd.Flags().StringVar(&f_%s, %q, \"\", %q)\n",
+			goSafeIdent(f.DotPath), f.DotPath, flagHelp(f.Type, f.Format, f.Description, false))
 	}
 	if c.HasBody {
 		fmt.Fprintln(b, `			cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")`)
@@ -724,41 +832,21 @@ func emitCommand(b *bytes.Buffer, c plannedCmd, provideVar string) {
 	fmt.Fprintln(b, "\t\t}")
 }
 
-func emitTxSubtree(b *bytes.Buffer, shortcuts []txShortcut, provideVar string) {
-	const txLong = "Create a transaction. Each <type> exposes its body fields as --params.<field> flags.\n" +
-		"See `bron tx --help` for the list of available types."
-
-	const txExample = "  bron tx withdrawal --accountId <accountId> --externalId <idempotencyKey> \\\n" +
-		"    --params.amount=100 --params.assetId=5000 \\\n" +
-		"    --params.networkId=ETH --params.toAddress=<address>\n\n" +
-		"  bron tx allowance --accountId <accountId> --externalId <idempotencyKey> \\\n" +
-		"    --params.assetId=5000 --params.networkId=ETH \\\n" +
-		"    --params.toAddress=<spenderAddress> --params.amount=1000\n\n" +
-		"  bron tx stake-delegation --accountId <accountId> --externalId <idempotencyKey> \\\n" +
-		"    --params.amount=32 --params.assetId=5000 --params.poolId=<poolId>\n\n" +
-		"  bron tx fiat-out --accountId <accountId> --externalId <idempotencyKey> \\\n" +
-		"    --params.amount=100 --params.assetId=5000 --params.fiatAssetId=USD \\\n" +
-		"    --params.networkId=ETH --params.toAddressBookRecordId=<recordId>\n\n" +
-		"  bron tx withdrawal --file ./tx.json\n" +
-		"  cat tx.json | bron tx withdrawal --file -\n" +
-		"  bron tx withdrawal --json '{\"accountId\":\"<accountId>\",\"params\":{\"amount\":100,\"assetId\":\"5000\"}}'"
-
-	fmt.Fprintln(b, "\t{")
-	fmt.Fprintln(b, "\t\ttx := &cobra.Command{")
-	fmt.Fprintln(b, "\t\t\tUse:     \"tx <type>\",")
-	fmt.Fprintln(b, "\t\t\tShort:   \"create a transaction (shortcut for transactions create --transactionType <type>)\",")
-	fmt.Fprintln(b, "\t\t\tGroupID: \"api\",")
-	fmt.Fprintf(b, "\t\t\tLong:    %q,\n", txLong)
-	fmt.Fprintf(b, "\t\t\tExample: %q,\n", txExample)
-	fmt.Fprintln(b, "\t\t}")
-
-	// One subcommand per type
-	for _, s := range shortcuts {
-		emitTxShortcut(b, s, provideVar)
+// flagHelp builds the cobra usage string. Format: "[type<format>] description (required)".
+// Empty type/format/description segments are dropped so trivial cases stay clean.
+func flagHelp(t, format, description string, required bool) string {
+	var prefix string
+	switch {
+	case t != "" && format != "":
+		prefix = "[" + t + "<" + format + ">] "
+	case t != "":
+		prefix = "[" + t + "] "
 	}
-
-	fmt.Fprintln(b, "\t\troot.AddCommand(tx)")
-	fmt.Fprintln(b, "\t}")
+	suffix := ""
+	if required {
+		suffix = " (required)"
+	}
+	return prefix + description + suffix
 }
 
 func emitTxShortcut(b *bytes.Buffer, s txShortcut, provideVar string) {
@@ -766,10 +854,10 @@ func emitTxShortcut(b *bytes.Buffer, s txShortcut, provideVar string) {
 
 	// Flag declarations.
 	for _, f := range s.TopFields {
-		fmt.Fprintf(b, "\t\t\tvar f_%s string\n", goSafeIdent(f))
+		fmt.Fprintf(b, "\t\t\tvar f_%s string\n", goSafeIdent(f.DotPath))
 	}
 	for _, p := range s.Params {
-		fmt.Fprintf(b, "\t\t\tvar p_%s string\n", goSafeIdent(p))
+		fmt.Fprintf(b, "\t\t\tvar p_%s string\n", goSafeIdent(p.DotPath))
 	}
 	fmt.Fprintln(b, "\t\t\tvar fileFlag string")
 	fmt.Fprintln(b, "\t\t\tvar jsonFlag string")
@@ -789,10 +877,10 @@ func emitTxShortcut(b *bytes.Buffer, s txShortcut, provideVar string) {
 	fmt.Fprintln(b, "\t\t\t\t\tfields := map[string]string{")
 	fmt.Fprintf(b, "\t\t\t\t\t\t\"transactionType\": %q,\n", s.Key)
 	for _, f := range s.TopFields {
-		fmt.Fprintf(b, "\t\t\t\t\t\t%q: f_%s,\n", f, goSafeIdent(f))
+		fmt.Fprintf(b, "\t\t\t\t\t\t%q: f_%s,\n", f.DotPath, goSafeIdent(f.DotPath))
 	}
 	for _, p := range s.Params {
-		fmt.Fprintf(b, "\t\t\t\t\t\t%q: p_%s,\n", "params."+p, goSafeIdent(p))
+		fmt.Fprintf(b, "\t\t\t\t\t\t%q: p_%s,\n", "params."+p.DotPath, goSafeIdent(p.DotPath))
 	}
 	fmt.Fprintln(b, "\t\t\t\t\t}")
 	fmt.Fprintln(b, "\t\t\t\t\tpayload, err := body.Compose(baseline, fields)")
@@ -810,15 +898,17 @@ func emitTxShortcut(b *bytes.Buffer, s txShortcut, provideVar string) {
 	fmt.Fprintln(b, "\t\t\t}")
 
 	for _, f := range s.TopFields {
-		fmt.Fprintf(b, "\t\t\tcmd.Flags().StringVar(&f_%s, %q, \"\", \"\")\n", goSafeIdent(f), f)
+		fmt.Fprintf(b, "\t\t\tcmd.Flags().StringVar(&f_%s, %q, \"\", %q)\n",
+			goSafeIdent(f.DotPath), f.DotPath, flagHelp(f.Type, f.Format, f.Description, false))
 	}
 	for _, p := range s.Params {
-		fmt.Fprintf(b, "\t\t\tcmd.Flags().StringVar(&p_%s, %q, \"\", \"\")\n", goSafeIdent(p), "params."+p)
+		fmt.Fprintf(b, "\t\t\tcmd.Flags().StringVar(&p_%s, %q, \"\", %q)\n",
+			goSafeIdent(p.DotPath), "params."+p.DotPath, flagHelp(p.Type, p.Format, p.Description, false))
 	}
 	fmt.Fprintln(b, `			cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")`)
 	fmt.Fprintln(b, `			cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")`)
 	fmt.Fprintln(b, `			cmd.MarkFlagsMutuallyExclusive("file", "json")`)
-	fmt.Fprintln(b, "\t\t\ttx.AddCommand(cmd)")
+	fmt.Fprintln(b, "\t\t\tres.AddCommand(cmd)")
 	fmt.Fprintln(b, "\t\t}")
 }
 
@@ -914,14 +1004,14 @@ func emitHelpDoc(plan []plannedCmd, shortcuts []txShortcut) ([]byte, error) {
 			if i > 0 {
 				fmt.Fprint(&b, ", ")
 			}
-			fmt.Fprintf(&b, "%q", p)
+			fmt.Fprintf(&b, "%q", p.DotPath)
 		}
 		fmt.Fprint(&b, "}, TopFields: []string{")
 		for i, f := range s.TopFields {
 			if i > 0 {
 				fmt.Fprint(&b, ", ")
 			}
-			fmt.Fprintf(&b, "%q", f)
+			fmt.Fprintf(&b, "%q", f.DotPath)
 		}
 		fmt.Fprintln(&b, "}},")
 	}
