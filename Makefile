@@ -1,6 +1,6 @@
 .PHONY: build build-fast generate sync-spec test lint lint-fix tidy dist clean help
 
-VERSION    ?= dev
+VERSION    ?= dev-$(shell date +%Y-%m-%d-%H-%M)
 GO         := go
 GOFLAGS    ?= -trimpath
 LDFLAGS    := -s -w -X main.Version=$(VERSION)
