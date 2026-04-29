@@ -296,6 +296,46 @@ type plannedCmd struct {
 	ResponseRef string // component name of 200/201 response schema (e.g. "Transactions")
 }
 
+// embedTokens picks the includeXxx query params and converts them to the
+// kebab-case tokens accepted by the global `--embed` flag — gives the help
+// renderer the per-command list of valid embed values without re-walking the
+// raw query params at runtime.
+func (c plannedCmd) embedTokens() []string {
+	var out []string
+	for _, q := range c.QueryParams {
+		tok, ok := embedTokenFromInclude(q.Name)
+		if !ok {
+			continue
+		}
+		out = append(out, tok)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func embedTokenFromInclude(flag string) (string, bool) {
+	const prefix = "include"
+	if !strings.HasPrefix(flag, prefix) || len(flag) == len(prefix) {
+		return "", false
+	}
+	rest := flag[len(prefix):]
+	if rest[0] < 'A' || rest[0] > 'Z' {
+		return "", false
+	}
+	var b strings.Builder
+	for i, r := range rest {
+		if r >= 'A' && r <= 'Z' {
+			if i > 0 {
+				b.WriteByte('-')
+			}
+			b.WriteRune(r - 'A' + 'a')
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return b.String(), true
+}
+
 type param struct {
 	Name        string
 	Required    bool
@@ -988,12 +1028,13 @@ func emitHelpDoc(plan []plannedCmd, shortcuts []txShortcut) ([]byte, error) {
 	fmt.Fprintln(&b, "package generated")
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "type HelpEntry struct {")
-	fmt.Fprintln(&b, "\tMethod      string")
-	fmt.Fprintln(&b, "\tPath        string")
-	fmt.Fprintln(&b, "\tBodyRef     string")
-	fmt.Fprintln(&b, "\tResponseRef string")
-	fmt.Fprintln(&b, "\tQueryParams []HelpQueryParam")
-	fmt.Fprintln(&b, "\tPathArgs    []string")
+	fmt.Fprintln(&b, "\tMethod       string")
+	fmt.Fprintln(&b, "\tPath         string")
+	fmt.Fprintln(&b, "\tBodyRef      string")
+	fmt.Fprintln(&b, "\tResponseRef  string")
+	fmt.Fprintln(&b, "\tQueryParams  []HelpQueryParam")
+	fmt.Fprintln(&b, "\tPathArgs     []string")
+	fmt.Fprintln(&b, "\tEmbedTokens  []string // valid --embed values, derived from includeXxx query params")
 	fmt.Fprintln(&b, "}")
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "type HelpQueryParam struct {")
@@ -1031,6 +1072,16 @@ func emitHelpDoc(plan []plannedCmd, shortcuts []txShortcut) ([]byte, error) {
 						fmt.Fprint(&b, ", ")
 					}
 					fmt.Fprintf(&b, "{Name: %q, Required: %t}", q.Name, q.Required)
+				}
+				fmt.Fprint(&b, "}")
+			}
+			if tokens := c.embedTokens(); len(tokens) > 0 {
+				fmt.Fprint(&b, ", EmbedTokens: []string{")
+				for i, t := range tokens {
+					if i > 0 {
+						fmt.Fprint(&b, ", ")
+					}
+					fmt.Fprintf(&b, "%q", t)
 				}
 				fmt.Fprint(&b, "}")
 			}

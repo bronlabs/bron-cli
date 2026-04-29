@@ -248,6 +248,11 @@ func main() {
 
 	generated.Register(root, func() (*client.Client, error) { return buildClient(gf) })
 
+	// `bron balances list --embed prices` is CLI-side orchestration: the
+	// generated RunE doesn't know about --embed prices, so wrap it to fall
+	// through to the prices-aware path when the token is set.
+	wrapBalancesListEmbedPrices(root, gf)
+
 	// --schema short-circuits the verb command, but cobra validates Args before
 	// PersistentPreRun. Wrap each api-group cmd's Args so it is bypassed when
 	// --schema is set, allowing `bron tx get --schema` to skip the
@@ -572,6 +577,16 @@ func appendReturnsHint(cmd *cobra.Command) {
 		}
 	}
 
+	tokens := append([]string(nil), entry.EmbedTokens...)
+	if r == "balances" && v == "list" {
+		tokens = append(tokens, "prices")
+		sort.Strings(tokens)
+	}
+	if len(tokens) > 0 {
+		fmt.Fprintf(out, "\nEmbed tokens (`--embed %s`): %s\n",
+			tokens[0], strings.Join(tokens, ", "))
+	}
+
 	if entry.ResponseRef == "" {
 		fmt.Fprintf(out, "\nFull schema: bron %s %s --schema\n", r, v)
 		return
@@ -785,6 +800,10 @@ func resourceVerbFor(cmd *cobra.Command) (string, string, bool) {
 // the command. Tokens are kebab-case and get camelised: "permission-groups" →
 // "includePermissionGroups". Unknown tokens print a stderr warning naming the
 // missing flag — silent no-ops are hard to debug for typos like "settngs".
+//
+// `prices` is a CLI-only token (no backend includeXxx flag yet); on
+// `bron balances list` it triggers a post-process that fetches asset prices
+// and merges them into the response. Skipped silently for any other command.
 func applyEmbed(cmd *cobra.Command, embed string) {
 	if embed == "" {
 		return
@@ -793,6 +812,11 @@ func applyEmbed(cmd *cobra.Command, embed string) {
 		tok = strings.TrimSpace(tok)
 		if tok == "" {
 			continue
+		}
+		if tok == "prices" {
+			if r, v, ok := resourceVerbFor(cmd); ok && r == "balances" && v == "list" {
+				continue
+			}
 		}
 		var camel strings.Builder
 		upNext := true
@@ -815,6 +839,16 @@ func applyEmbed(cmd *cobra.Command, embed string) {
 		}
 		fmt.Fprintf(os.Stderr, "warning: --embed token %q has no matching --%s flag on `bron %s`\n", tok, flagName, cmd.CommandPath())
 	}
+}
+
+// embedHasToken returns true when the global --embed list contains tok.
+func embedHasToken(embed, tok string) bool {
+	for _, t := range strings.Split(embed, ",") {
+		if strings.TrimSpace(t) == tok {
+			return true
+		}
+	}
+	return false
 }
 
 func lookupEntry(resource, verb string) (generated.HelpEntry, bool) {
