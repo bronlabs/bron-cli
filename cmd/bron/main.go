@@ -51,10 +51,12 @@ const rootExample = `  bron help
   bron config use-profile production
   bron config set workspace=<workspaceId> key_file=~/.config/bron/keys/me.jwk
 
-  bron accounts list --accountTypes vault --limit 50
+  bron accounts list --accountTypes vault --statuses active --limit 50
   bron accounts get <accountId>
 
   bron balances list --accountId <accountId> --assetId 5000 --networkId ETH --nonEmpty true
+  bron balances list --embed prices --nonEmpty true        # attaches _embedded.usdPrice / _embedded.usdValue
+  bron balances list --embed prices --output table --columns accountId,symbol,totalBalance,_embedded.usdValue
 
   bron tx list --transactionStatuses waiting-approval,signing --limit 50
   bron tx list --transactionTypes withdrawal,allowance --createdAtFrom 2026-04-01
@@ -248,10 +250,12 @@ func main() {
 
 	generated.Register(root, func() (*client.Client, error) { return buildClient(gf) })
 
-	// `bron balances list --embed prices` is CLI-side orchestration: the
-	// generated RunE doesn't know about --embed prices, so wrap it to fall
-	// through to the prices-aware path when the token is set.
+	// `bron balances list --embed prices` and `bron tx list --embed assets`
+	// are CLI-side orchestrations: the generated RunE doesn't know about
+	// these tokens, so wrap each one to fall through to the augmented path
+	// when the token is set.
 	wrapBalancesListEmbedPrices(root, gf)
+	wrapTxListEmbedAssets(root, gf)
 
 	// --schema short-circuits the verb command, but cobra validates Args before
 	// PersistentPreRun. Wrap each api-group cmd's Args so it is bypassed when
@@ -448,25 +452,26 @@ func printHelpNavigation(w io.Writer) error {
 	return nil
 }
 
-// buildFullSchemaDoc produces a CLI-shaped schema document for agent consumption.
-// Layout:
+// buildFullSchemaDoc returns the embedded OpenAPI 3.1 spec verbatim, decorated
+// with bron-CLI specifics under the `x-bron-cli` extension. Verbatim because
+// the spec IS the source of truth — reshaping it loses information, and any
+// jq/swagger consumer already knows how to walk the standard structure.
 //
-//	{
-//	  "version":  "0.1.1",
-//	  "commands": [{usage, command, method, path, path_args, query_params, body_ref, response_ref}, ...],
-//	  "tx":       [{type, usage, params_ref, params, top_fields}, ...],
-//	  "schemas":  { components.schemas from the embedded OpenAPI }
-//	}
+// Under x-bron-cli we add:
+//   - commands[]: each (resource verb) → cli usage line + raw OpenAPI path/method
+//   - tx_shortcuts[]: synthetic `bron tx <type>` commands with their params class
 func buildFullSchemaDoc() (map[string]interface{}, error) {
+	var doc map[string]interface{}
+	if err := json.Unmarshal(generated.Spec, &doc); err != nil {
+		return nil, fmt.Errorf("decode embedded spec: %w", err)
+	}
+
 	type cmdDoc struct {
-		Command     string                       `json:"command"`
-		Usage       string                       `json:"usage"`
-		Method      string                       `json:"method"`
-		Path        string                       `json:"path"`
-		PathArgs    []string                     `json:"path_args,omitempty"`
-		QueryParams []generated.HelpQueryParam   `json:"query_params,omitempty"`
-		BodyRef     string                       `json:"body_ref,omitempty"`
-		ResponseRef string                       `json:"response_ref,omitempty"`
+		Command  string `json:"command"`
+		Usage    string `json:"usage"`
+		Method   string `json:"method"`
+		Path     string `json:"path"`
+		PathArgs []string `json:"path_args,omitempty"`
 	}
 	type txDoc struct {
 		Type      string   `json:"type"`
@@ -496,14 +501,11 @@ func buildFullSchemaDoc() (map[string]interface{}, error) {
 				usage += " <" + p + ">"
 			}
 			commands = append(commands, cmdDoc{
-				Command:     r + " " + v,
-				Usage:       usage,
-				Method:      e.Method,
-				Path:        e.Path,
-				PathArgs:    e.PathArgs,
-				QueryParams: e.QueryParams,
-				BodyRef:     e.BodyRef,
-				ResponseRef: e.ResponseRef,
+				Command:  r + " " + v,
+				Usage:    usage,
+				Method:   e.Method,
+				Path:     e.Path,
+				PathArgs: e.PathArgs,
 			})
 		}
 	}
@@ -525,29 +527,12 @@ func buildFullSchemaDoc() (map[string]interface{}, error) {
 		})
 	}
 
-	var spec struct {
-		Components struct {
-			Schemas map[string]json.RawMessage `json:"schemas"`
-		} `json:"components"`
+	doc["x-bron-cli"] = map[string]interface{}{
+		"version":       Version,
+		"commands":      commands,
+		"tx_shortcuts":  tx,
 	}
-	if err := json.Unmarshal(generated.Spec, &spec); err != nil {
-		return nil, fmt.Errorf("decode embedded spec: %w", err)
-	}
-	schemas := make(map[string]interface{}, len(spec.Components.Schemas))
-	for name, raw := range spec.Components.Schemas {
-		var v interface{}
-		if err := json.Unmarshal(raw, &v); err != nil {
-			return nil, fmt.Errorf("decode schema %q: %w", name, err)
-		}
-		schemas[name] = v
-	}
-
-	return map[string]interface{}{
-		"version":  Version,
-		"commands": commands,
-		"tx":       tx,
-		"schemas":  schemas,
-	}, nil
+	return doc, nil
 }
 
 // appendReturnsHint prints a "Returns:" block at the bottom of help output for
@@ -580,8 +565,11 @@ func appendReturnsHint(cmd *cobra.Command) {
 	tokens := append([]string(nil), entry.EmbedTokens...)
 	if r == "balances" && v == "list" {
 		tokens = append(tokens, "prices")
-		sort.Strings(tokens)
 	}
+	if r == "tx" && v == "list" {
+		tokens = append(tokens, "assets")
+	}
+	sort.Strings(tokens)
 	if len(tokens) > 0 {
 		fmt.Fprintf(out, "\nEmbed tokens (`--embed %s`): %s\n",
 			tokens[0], strings.Join(tokens, ", "))
@@ -818,6 +806,11 @@ func applyEmbed(cmd *cobra.Command, embed string) {
 				continue
 			}
 		}
+		if tok == "assets" {
+			if r, v, ok := resourceVerbFor(cmd); ok && r == "tx" && v == "list" {
+				continue
+			}
+		}
 		var camel strings.Builder
 		upNext := true
 		for _, r := range tok {
@@ -878,10 +871,16 @@ func buildSchemaDoc(entry generated.HelpEntry) (map[string]interface{}, error) {
 	}, nil
 }
 
-// buildCommandHelpDoc returns a comprehensive per-command document for agents:
-// usage, description, permissions, all path/query parameters with their schemas,
-// the body schema, and every response (status -> schema). Resolved on the fly
-// from the embedded OpenAPI spec.
+// buildCommandHelpDoc emits a valid OpenAPI 3.1 fragment scoped to a single
+// command. Strict spec shape so agents/tools (jq, swagger viewer, OpenAPI
+// validators) can navigate it the same way they navigate the project's full
+// `bron-open-api-public.json`. Bron-CLI extras (the human command, extracted
+// permissions) live under the `x-bron-cli` extension namespace so the doc
+// stays valid OpenAPI.
+//
+// The components.schemas map is the transitive closure of refs reachable from
+// the operation — keeps the per-command payload small while still letting
+// consumers resolve every $ref locally without a second fetch.
 func buildCommandHelpDoc(resource, verb string, entry generated.HelpEntry) (map[string]interface{}, error) {
 	usage := "bron " + resource + " " + verb
 	for _, p := range entry.PathArgs {
@@ -898,42 +897,102 @@ func buildCommandHelpDoc(resource, verb string, entry generated.HelpEntry) (map[
 	if d, ok := op["description"].(string); ok {
 		description, permissions = stripPermissions(d)
 	}
-
-	pathParams, queryParams := splitParams(op["parameters"])
-
-	body, err := resolveRef(entry.BodyRef)
-	if err != nil {
-		return nil, err
+	if description != "" {
+		op["description"] = description
+	} else {
+		delete(op, "description")
 	}
 
-	responses, err := buildResponses(op["responses"])
+	schemas, err := closureSchemas(op)
 	if err != nil {
 		return nil, err
 	}
 
 	doc := map[string]interface{}{
-		"usage":     usage,
-		"command":   resource + " " + verb,
-		"method":    entry.Method,
-		"path":      entry.Path,
-		"responses": responses,
-	}
-	if description != "" {
-		doc["description"] = description
+		"openapi": "3.1.0",
+		"info": map[string]interface{}{
+			"title":   usage,
+			"version": Version,
+		},
+		"paths": map[string]interface{}{
+			entry.Path: map[string]interface{}{
+				strings.ToLower(entry.Method): op,
+			},
+		},
+		"components": map[string]interface{}{
+			"schemas": schemas,
+		},
+		"x-bron-cli": map[string]interface{}{
+			"command": resource + " " + verb,
+			"usage":   usage,
+		},
 	}
 	if len(permissions) > 0 {
-		doc["permissions"] = permissions
-	}
-	if len(pathParams) > 0 {
-		doc["path_params"] = pathParams
-	}
-	if len(queryParams) > 0 {
-		doc["query_params"] = queryParams
-	}
-	if body != nil {
-		doc["body"] = body
+		doc["x-bron-cli"].(map[string]interface{})["permissions"] = permissions
 	}
 	return doc, nil
+}
+
+// closureSchemas walks every $ref reachable from root and returns the named
+// component schemas it touches, transitively. Empty map is fine — used to
+// keep the per-command openapi fragment self-contained without dumping the
+// whole 250KB schema universe.
+func closureSchemas(root interface{}) (map[string]interface{}, error) {
+	var allSchemas struct {
+		Components struct {
+			Schemas map[string]json.RawMessage `json:"schemas"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(generated.Spec, &allSchemas); err != nil {
+		return nil, fmt.Errorf("decode spec components: %w", err)
+	}
+	out := map[string]interface{}{}
+	queue := collectRefs(root)
+	for len(queue) > 0 {
+		name := queue[0]
+		queue = queue[1:]
+		if _, seen := out[name]; seen {
+			continue
+		}
+		raw, ok := allSchemas.Components.Schemas[name]
+		if !ok {
+			continue
+		}
+		var v interface{}
+		if err := json.Unmarshal(raw, &v); err != nil {
+			return nil, fmt.Errorf("decode schema %q: %w", name, err)
+		}
+		out[name] = v
+		queue = append(queue, collectRefs(v)...)
+	}
+	return out, nil
+}
+
+// collectRefs walks v and returns every component name reachable through
+// `$ref: #/components/schemas/<Name>`. Order is breadth-first, duplicates
+// allowed — caller dedupes via the visited map.
+func collectRefs(v interface{}) []string {
+	var out []string
+	var walk func(node interface{})
+	walk = func(node interface{}) {
+		switch t := node.(type) {
+		case map[string]interface{}:
+			if ref, ok := t["$ref"].(string); ok {
+				if name := strings.TrimPrefix(ref, "#/components/schemas/"); name != ref {
+					out = append(out, name)
+				}
+			}
+			for _, child := range t {
+				walk(child)
+			}
+		case []interface{}:
+			for _, item := range t {
+				walk(item)
+			}
+		}
+	}
+	walk(v)
+	return out
 }
 
 // collectDateKeysFromSpec scans the embedded OpenAPI spec for property names

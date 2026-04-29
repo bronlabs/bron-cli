@@ -180,8 +180,11 @@ func castMapSlice(arr []interface{}) []map[string]interface{} {
 }
 
 // mergeBalancePrices mutates the balances response in place: each item gets
-// `usdPrice`, `usdQuoteSymbolId`, and `usdValue = totalBalance * price`
-// computed via big.Rat so trailing precision survives.
+// `usdPrice`, `usdQuoteSymbolId`, and `usdValue = totalBalance * price` placed
+// under `_embedded` so calculated fields don't pollute the spec-defined
+// Balance shape. Same HATEOAS-style nesting that backend uses for resolved
+// entities (e.g. WorkspaceMemberEmbedded). Multiplication uses big.Rat so
+// trailing precision survives.
 func mergeBalancePrices(v interface{}, prices map[string]assetPrice) {
 	for _, b := range balanceItems(v) {
 		assetId, _ := b["assetId"].(string)
@@ -189,16 +192,21 @@ func mergeBalancePrices(v interface{}, prices map[string]assetPrice) {
 		if !ok {
 			continue
 		}
-		b["usdPrice"] = p.Price
+		emb, _ := b["_embedded"].(map[string]interface{})
+		if emb == nil {
+			emb = map[string]interface{}{}
+			b["_embedded"] = emb
+		}
+		emb["usdPrice"] = p.Price
 		if p.QuoteSymbolId != "" {
-			b["usdQuoteSymbolId"] = p.QuoteSymbolId
+			emb["usdQuoteSymbolId"] = p.QuoteSymbolId
 		}
 		total := numberAsString(b["totalBalance"])
 		if total == "" {
 			continue
 		}
 		if usdValue := mulDecimal(total, p.Price); usdValue != "" {
-			b["usdValue"] = usdValue
+			emb["usdValue"] = usdValue
 		}
 	}
 }
