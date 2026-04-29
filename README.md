@@ -1,13 +1,23 @@
 # Bron CLI
 
-Public CLI for the [Bron](https://bron.org) API. Single static binary, generated from the OpenAPI spec.
+Public CLI for the [Bron](https://bron.org) API — a custody and treasury platform for digital assets. Single static binary, regenerated from the OpenAPI spec on every API release. Designed to be a first-class surface for both humans and LLM agents.
+
+Use it to script everything you do in the Bron UI: list accounts and balances, create and approve withdrawals, manage address books, query transaction history, set up automation. If you don't have a Bron account yet, [start here](https://bron.org).
+
+## Prerequisites
+
+- An active Bron workspace (sign up at [bron.org](https://bron.org)).
+- A workspace member with **API key** permissions in that workspace.
+- Access to the Bron UI to register the public half of an API key (Settings → API keys).
+
+If you only need a UI client, you don't need the CLI. It targets API consumers — automations, treasury scripts, on-call dashboards, and agent integrations.
 
 ## Install
 
 ### MacOS / Linux
 
 ```bash
-brew install bronlabs/tap/bron-cli
+brew install bronlabs/apps/bron
 
 # Pre-built binaries
 curl -L https://github.com/bronlabs/bron-cli/releases/latest/download/bron-darwin-arm64 -o /usr/local/bin/bron

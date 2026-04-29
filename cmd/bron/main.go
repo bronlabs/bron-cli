@@ -1202,7 +1202,10 @@ func queryFlagDocs(params []generated.HelpQueryParam) []map[string]interface{} {
 	return out
 }
 
-// exitCodeForStatus maps HTTP status to the exit-code contract from BRO-486.
+// exitCodeForStatus maps HTTP status onto the CLI's stable exit-code contract:
+// 3 = unauthorised (401/403), 4 = not found (404), 5 = bad request (400),
+// 6 = conflict (409), 7 = rate limited (429), 8 = server (5xx), 1 = anything
+// else. Documented in `bron help errors`.
 func exitCodeForStatus(status int) int {
 	switch {
 	case status == 401, status == 403:

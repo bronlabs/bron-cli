@@ -1,5 +1,10 @@
 // cligen reads bron-open-api-public.json and emits cobra command definitions
-// under generated/. The derivation rules are documented in BRO-486.
+// under generated/. Resources come from OpenAPI tags (kebab-case), verbs are
+// derived from the HTTP method + URL shape: GET /xxx → list, GET /xxx/{id} →
+// get, POST → create, PUT/PATCH → update, DELETE → delete. Trailing path
+// segments after an id become the verb (POST /xxx/{id}/yyy → yyy). Names map
+// 1:1 with the spec — no aliases, no remapping — so the spec stays the source
+// of truth and the CLI regenerates losslessly on every release.
 package main
 
 import (
@@ -125,8 +130,11 @@ type txShortcut struct {
 	Params    []bodyField // leaves under "params." (without prefix)
 }
 
-// txKeyOverrides handles class→key mismatches that the algorithm can't infer.
-// Keep tiny; rationale documented in BRO-486.
+// txKeyOverrides handles class→key mismatches the kebab-case derivation
+// can't infer (e.g. "StakeUnDelegationParams" — the embedded "Un" capitals
+// would split into "stake-un-delegation" instead of "stake-undelegation").
+// Keep tiny; only add when a transactionType enum value disagrees with what
+// classToKey would produce.
 var txKeyOverrides = map[string]string{
 	"StakeUnDelegationParams": "stake-undelegation",
 }
@@ -412,7 +420,10 @@ func buildPlan(spec rawSpec) ([]plannedCmd, error) {
 	return out, nil
 }
 
-// derive applies the algorithm from BRO-486 with alias overrides.
+// derive turns an (HTTP method, URL path) pair into a (resource, verb,
+// pathArgs) triple. URL placeholders become arg names; trailing non-placeholder
+// segments after an id become the verb. resourceAliases / endpointAliases
+// override specific cases that don't read well from the URL alone.
 func derive(method, path string) plannedCmd {
 	if alias, ok := endpointAliases[method+" "+path]; ok {
 		_, args := splitPath(path)

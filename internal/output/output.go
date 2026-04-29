@@ -1,6 +1,9 @@
-// Package output renders API responses in one of the formats from BRO-486:
-// json (default), yaml, jsonl, table — optionally filtered by --query
-// (a small JSONPath subset).
+// Package output renders API responses in one of four formats:
+// json (default), yaml, jsonl, table — optionally narrowed by --columns or
+// filtered by --query (a small JSONPath subset). Epoch-millis date fields
+// (anything with format=date-time-millis in the spec) are humanised to ISO-8601
+// across every format so jq pipelines and humans see the same readable
+// timestamp.
 package output
 
 import (

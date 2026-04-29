@@ -41,9 +41,8 @@ Behind a corporate proxy?
   bron config set proxy=http://user:pass@host:8080
   # or set HTTPS_PROXY / HTTP_PROXY in the environment — both are honored.
 
-base_url defaults to https://api.bron.org and is hidden from help; override with
-  bron config set base_url=https://api.qa.bron.io   # mostly for QA / staging
-  # or pass --base-url per call, or BRON_BASE_URL=... in the environment.
+base_url defaults to https://api.bron.org and is hidden from help; override
+with --base-url per call, or BRON_BASE_URL=... in the environment.
 
 Reference: https://docs.bron.org/cli/profiles`,
 
@@ -150,20 +149,20 @@ Withdrawal-style transactions accept four mutually-exclusive recipient fields un
   --params.toAccountId=<accountId>          internal transfer between two of your accounts.
                                              No on-chain fee path; instant.
   --params.toWorkspaceTag=<tag>             route to another Bron workspace by its tag
-                                             (e.g. "tesla" → routes to that workspace).
+                                             (e.g. "treasury-ops" → routes to that workspace).
 
 Examples:
-  bron tx withdrawal --accountId <accId> --externalId <idem> \
-    --params.amount=100 --params.assetId=20145 --params.networkId=ethereum \
-    --params.toAddressBookRecordId=a30lin1p2zr1wzqqt1l8n652
+  bron tx withdrawal --accountId <accountId> --externalId <idempotencyKey> \
+    --params.amount=100 --params.assetId=5000 --params.networkId=ETH \
+    --params.toAddressBookRecordId=<recordId>
 
-  bron tx withdrawal --accountId <accId> --externalId <idem> \
-    --params.amount=10  --params.assetId=20145 --params.networkId=ethereum \
-    --params.toAccountId=w9jh0gf3w9qaxlre7enezt17
+  bron tx withdrawal --accountId <accountId> --externalId <idempotencyKey> \
+    --params.amount=10  --params.assetId=5000 --params.networkId=ETH \
+    --params.toAccountId=<destAccountId>
 
-  bron tx withdrawal --accountId <accId> --externalId <idem> \
-    --params.amount=5   --params.assetId=20145 --params.networkId=ethereum \
-    --params.toWorkspaceTag=tesla
+  bron tx withdrawal --accountId <accountId> --externalId <idempotencyKey> \
+    --params.amount=5   --params.assetId=5000 --params.networkId=ETH \
+    --params.toWorkspaceTag=<workspaceTag>
 
 Reference: https://docs.bron.org/api/withdrawals`,
 

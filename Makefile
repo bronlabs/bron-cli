@@ -1,4 +1,4 @@
-.PHONY: build build-fast generate sync-spec test lint lint-fix tidy dist clean help
+.PHONY: build build-fast generate test lint lint-fix tidy dist clean help
 
 VERSION    ?= dev-$(shell date +%Y-%m-%d-%H-%M)
 GO         := go
@@ -28,9 +28,6 @@ $(STAMP): $(SPEC) $(CLIGEN_SRC)
 generate:
 	$(GO) run ./cmd/cligen $(SPEC) generated
 	@touch $(STAMP)
-
-sync-spec:
-	cp ../bron-sdk-go/$(SPEC) $(SPEC)
 
 test:
 	$(GO) test ./...
@@ -64,7 +61,6 @@ help:
 	@echo "  build-fast  — always regen, then build (use after suspicious mtime issues)"
 	@echo "  dist        — cross-compile for darwin/linux × amd64/arm64 into bin/"
 	@echo "  generate    — force-run cligen against $(SPEC)"
-	@echo "  sync-spec   — pull $(SPEC) from ../bron-sdk-go"
 	@echo "  test        — go test ./..."
 	@echo "  lint        — golangci-lint run ./..."
 	@echo "  lint-fix    — golangci-lint --fix"

@@ -7,11 +7,10 @@ package auth
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
-	crand "crypto/rand"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 )
 
 type JWK struct {
@@ -30,15 +29,23 @@ type KeyPair struct {
 }
 
 func GenerateKeyPair() (*KeyPair, error) {
-	priv, err := ecdsa.GenerateKey(elliptic.P256(), crand.Reader)
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("generate ecdsa key: %w", err)
 	}
 
+	// Random kid drawn from crypto/rand. The server uses kid to bind the public
+	// key to a workspace, so collisions across users have to be vanishingly
+	// unlikely — math/rand seeded from time would produce identical kids when
+	// two users run keygen in the same second.
 	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	raw := make([]byte, 24)
+	if _, err := rand.Read(raw); err != nil {
+		return nil, fmt.Errorf("generate kid: %w", err)
+	}
 	kid := make([]byte, 24)
-	for i := range kid {
-		kid[i] = charset[rand.Intn(len(charset))]
+	for i, b := range raw {
+		kid[i] = charset[int(b)%len(charset)]
 	}
 
 	x := base64.RawURLEncoding.EncodeToString(priv.PublicKey.X.Bytes())
