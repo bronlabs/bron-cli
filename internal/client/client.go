@@ -1,7 +1,9 @@
 package client
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -78,16 +80,31 @@ func buildHTTPClient(proxyURL string) (*http.Client, error) {
 // Do executes a request, substituting `{workspaceId}` and any other path
 // placeholders (`{accountId}`, `{transactionId}`, ...) before sending.
 // All values are URL-escaped via `url.PathEscape`.
-// body / query / result are passed straight through to bron-sdk-go.
+//
+// Decoding goes through json.Decoder.UseNumber so decimal payloads keep their
+// exact wire representation. The default decoder converts every JSON number to
+// float64, which truncates large integers and rounds long decimals — fatal for
+// balances/amounts where a single trailing digit can be billions of wei. We
+// capture the raw response into json.RawMessage and re-decode locally so that
+// numeric leaves arrive as json.Number; output formatters then emit them
+// verbatim.
 func (c *Client) Do(ctx context.Context, method, path string, pathParams map[string]string, body, query, result interface{}) error {
 	resolved := strings.ReplaceAll(path, "{workspaceId}", url.PathEscape(c.WorkspaceID))
 	for name, val := range pathParams {
 		resolved = strings.ReplaceAll(resolved, "{"+name+"}", url.PathEscape(val))
 	}
-	return c.http.RequestWithContext(ctx, result, sdkhttp.RequestOptions{
-		Method: method,
-		Path:   resolved,
-		Body:   body,
-		Query:  query,
-	})
+	opts := sdkhttp.RequestOptions{Method: method, Path: resolved, Body: body, Query: query}
+	if result == nil {
+		return c.http.RequestWithContext(ctx, nil, opts)
+	}
+	var raw json.RawMessage
+	if err := c.http.RequestWithContext(ctx, &raw, opts); err != nil {
+		return err
+	}
+	if len(raw) == 0 {
+		return nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	return dec.Decode(result)
 }

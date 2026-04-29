@@ -116,6 +116,7 @@ const rootExample = `  bron help
   bron tx list --output yaml
   bron tx list --output table --columns transactionId,status,transactionType,createdAt
   bron tx list --output table --query '.transactions[*]'
+  bron tx list --output table --cell-max 0           # disable column truncation; full IDs/addresses
   bron tx get <transactionId> --query '.status'
 
   bron deposit-addresses list --accountId <accountId> --networkId ETH
@@ -338,20 +339,26 @@ func buildClient(gf *globalFlags) (*client.Client, error) {
 
 // newHelpCmd replaces cobra's default help command. Modes:
 //
-//	bron help                          — print root usage (cobra default)
+//	bron help                          — short navigation page (where to look)
 //	bron help <topic>                  — print a topic blurb (signing, profiles, output, …)
 //	bron help <resource>               — print resource subcommands (cobra default)
 //	bron help <resource> <verb>        — same as `bron <resource> <verb> --help` (cobra-style text)
 //	bron help <resource> <verb> --schema — JSON/YAML schema dump (request + response schema)
 //	bron help --schema                 — dump the full CLI schema as one document
 //
+// `bron help` deliberately differs from `bron --help`: the bare flag mirrors
+// cobra's flag-and-examples dump (good for humans scanning a terminal), while
+// the subcommand prints a navigation page that points at topics, per-command
+// help, and the JSON schema (good for agents deciding where to read next).
+//
 // `--schema` is the global root flag, so `bron <resource> <verb> --schema`
 // produces the same dump as `bron help <resource> <verb> --schema`.
 func newHelpCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "help [resource|topic] [verb]",
-		Short: "Help about any command. Add --schema for a machine-readable JSON dump.",
-		Long: "Without arguments — prints CLI usage.\n" +
+		Short: "Navigation page; pass <topic> or <resource> <verb> for details. Add --schema for a JSON dump.",
+		Long: "Without arguments — prints a navigation page (topics + how to read per-command help + schema entry points).\n" +
+			"For full root flags and examples, use `bron --help` instead.\n" +
 			"With <topic> — prints the named topic blurb (`bron help topics` for the list).\n" +
 			"With <resource> <verb> — prints the same text as `bron <resource> <verb> --help`.\n" +
 			"With --schema — dumps the full CLI schema (without args) or a per-command schema (with <resource> <verb>).",
@@ -364,6 +371,9 @@ func newHelpCmd() *cobra.Command {
 					return err
 				}
 				return output.Print(doc)
+			}
+			if len(args) == 0 {
+				return printHelpNavigation(cmd.OutOrStdout())
 			}
 			if len(args) == 1 {
 				if blurb, ok := topics[args[0]]; ok {
@@ -397,6 +407,40 @@ func newHelpCmd() *cobra.Command {
 		},
 	}
 	return cmd
+}
+
+// printHelpNavigation prints a compact map of bron's help system. Listing
+// resources comes from the generated HelpEntries map so it stays in sync with
+// the spec; topic names come from the static topics table.
+func printHelpNavigation(w io.Writer) error {
+	resources := make([]string, 0, len(generated.HelpEntries))
+	for r := range generated.HelpEntries {
+		resources = append(resources, r)
+	}
+	sort.Strings(resources)
+
+	fmt.Fprintln(w, "Bron CLI — help navigation. Pick a depth:")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  bron --help                          full root help (flags + examples)")
+	fmt.Fprintln(w, "  bron <resource> <verb> --help        per-command help (flags + body schema + return shape)")
+	fmt.Fprintln(w, "  bron help <topic>                    topic blurb")
+	fmt.Fprintln(w, "  bron help <resource> <verb> --schema per-command JSON schema (machine-readable)")
+	fmt.Fprintln(w, "  bron help --schema                   full CLI schema (every command, every type)")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Topics (`bron help <topic>`):")
+	fmt.Fprintln(w, "  "+strings.Join(topicNames(), ", "))
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Resources (`bron <resource> --help`):")
+	fmt.Fprintln(w, "  "+strings.Join(resources, ", "))
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Tx shortcuts (`bron tx <type> --help`):")
+	tx := make([]string, 0, len(generated.TxShortcuts))
+	for k := range generated.TxShortcuts {
+		tx = append(tx, k)
+	}
+	sort.Strings(tx)
+	fmt.Fprintln(w, "  "+strings.Join(tx, ", "))
+	return nil
 }
 
 // buildFullSchemaDoc produces a CLI-shaped schema document for agent consumption.

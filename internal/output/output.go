@@ -472,18 +472,23 @@ func selectTableColumns(rows []map[string]interface{}) []string {
 
 func isScalar(v interface{}) bool {
 	switch v.(type) {
-	case nil, string, bool, float64, int:
+	case nil, string, bool, float64, int, json.Number:
 		return true
 	}
 	return false
 }
 
+// formatScalar prints a leaf value. json.Number arrives from the client's
+// UseNumber decode and must be rendered by its underlying string so decimal
+// precision and trailing zeros survive (`"0.10"` stays `0.10`, never `0.1`).
 func formatScalar(v interface{}) string {
 	switch t := v.(type) {
 	case nil:
 		return ""
 	case string:
 		return t
+	case json.Number:
+		return string(t)
 	case bool:
 		return strconv.FormatBool(t)
 	case float64:
@@ -536,6 +541,16 @@ func tryEpochMsToISO(v interface{}) (string, bool) {
 			return "", false
 		}
 		n, err := strconv.ParseInt(t, 10, 64)
+		if err != nil {
+			return "", false
+		}
+		ms = n
+	case json.Number:
+		s := string(t)
+		if len(s) != 13 {
+			return "", false
+		}
+		n, err := strconv.ParseInt(s, 10, 64)
 		if err != nil {
 			return "", false
 		}

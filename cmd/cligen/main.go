@@ -9,6 +9,7 @@ import (
 	"go/format"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -164,10 +165,10 @@ func collectTxShortcuts(spec rawSpec) []txShortcut {
 		switch propKind(prop, reg) {
 		case "scalar":
 			t, f := leafTypeFormat(prop, reg)
-			topFields = append(topFields, bodyField{DotPath: name, Type: t, Format: f, Description: strings.TrimSpace(prop.Description)})
+			topFields = append(topFields, bodyField{DotPath: name, Type: t, Format: f, Description: strings.TrimSpace(prop.Description), Enum: enumValues(prop, reg)})
 		case "array":
 			t, f := arrayItemTypeFormat(prop, reg)
-			topFields = append(topFields, bodyField{DotPath: name, Type: t + "[]", Format: f, Description: strings.TrimSpace(prop.Description)})
+			topFields = append(topFields, bodyField{DotPath: name, Type: t + "[]", Format: f, Description: strings.TrimSpace(prop.Description), Enum: enumValues(prop, reg)})
 		}
 	}
 	sort.Slice(topFields, func(i, j int) bool { return topFields[i].DotPath < topFields[j].DotPath })
@@ -301,6 +302,7 @@ type param struct {
 	Type        string // OpenAPI type: "string" | "integer" | "boolean" | "array"
 	Format      string // OpenAPI format: "int64" | "date-time-millis" | "decimal" | ...
 	Description string
+	Enum        []string // resolved enum values (for arrays: from items)
 }
 
 // bodyField is a body-schema leaf carrying its OpenAPI type/format/description.
@@ -311,6 +313,7 @@ type bodyField struct {
 	Type        string
 	Format      string
 	Description string
+	Enum        []string
 }
 
 func buildPlan(spec rawSpec) ([]plannedCmd, error) {
@@ -341,6 +344,7 @@ func buildPlan(spec rawSpec) ([]plannedCmd, error) {
 								qp.Format = p.Schema.Items.Format
 							}
 						}
+						qp.Enum = enumValues(*p.Schema, registry)
 					}
 					cmd.QueryParams = append(cmd.QueryParams, qp)
 				}
@@ -512,10 +516,10 @@ func walkLeaves(s rawSchema, prefix string, reg map[string]rawSchema, visited ma
 		switch propKind(prop, reg) {
 		case "scalar":
 			t, f := leafTypeFormat(prop, reg)
-			*out = append(*out, bodyField{DotPath: dot, Type: t, Format: f, Description: strings.TrimSpace(prop.Description)})
+			*out = append(*out, bodyField{DotPath: dot, Type: t, Format: f, Description: strings.TrimSpace(prop.Description), Enum: enumValues(prop, reg)})
 		case "array":
 			t, f := arrayItemTypeFormat(prop, reg)
-			*out = append(*out, bodyField{DotPath: dot, Type: t + "[]", Format: f, Description: strings.TrimSpace(prop.Description)})
+			*out = append(*out, bodyField{DotPath: dot, Type: t + "[]", Format: f, Description: strings.TrimSpace(prop.Description), Enum: enumValues(prop, reg)})
 		case "object":
 			walkLeaves(prop, dot, reg, visited, out)
 		}
@@ -573,6 +577,37 @@ func refName(ref string) string {
 	parts := strings.Split(ref, "/")
 	return parts[len(parts)-1]
 }
+
+// enumValues returns the enum string values reachable from s.
+//
+// For arrays, the enum lives on the items schema. For scalars, it may be
+// inline (s.Enum) or behind a $ref to a named enum schema. Anything that
+// resolves to non-string enum values is dropped — flag help only renders
+// strings.
+func enumValues(s rawSchema, reg map[string]rawSchema) []string {
+	if s.Type == "array" && s.Items != nil {
+		return enumValues(*s.Items, reg)
+	}
+	values := s.Enum
+	if len(values) == 0 && s.Ref != "" {
+		values = reg[refName(s.Ref)].Enum
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		if str, ok := v.(string); ok {
+			out = append(out, str)
+		}
+	}
+	return out
+}
+
+// seeDetailsLink matches the redundant `[See details](/enums/Foo)` markdown
+// suffix that the spec attaches to enum-typed parameters. Stripped from the
+// CLI help text once we inline the actual enum values.
+var seeDetailsLink = regexp.MustCompile(`\s*\[See details\]\([^)]*\)\s*\.?\s*$`)
 
 // --- emission ---
 
@@ -816,11 +851,11 @@ func emitCommand(b *bytes.Buffer, c plannedCmd, provideVar string) {
 	// Flag bindings.
 	for _, q := range c.QueryParams {
 		fmt.Fprintf(b, "\t\t\tcmd.Flags().StringVar(&q_%s, %q, \"\", %q)\n",
-			goSafeIdent(q.Name), q.Name, flagHelp(q.Type, q.Format, q.Description, q.Required))
+			goSafeIdent(q.Name), q.Name, flagHelp(q.Type, q.Format, q.Description, q.Enum, q.Required))
 	}
 	for _, f := range c.BodyFields {
 		fmt.Fprintf(b, "\t\t\tcmd.Flags().StringVar(&f_%s, %q, \"\", %q)\n",
-			goSafeIdent(f.DotPath), f.DotPath, flagHelp(f.Type, f.Format, f.Description, false))
+			goSafeIdent(f.DotPath), f.DotPath, flagHelp(f.Type, f.Format, f.Description, f.Enum, false))
 	}
 	if c.HasBody {
 		fmt.Fprintln(b, `			cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")`)
@@ -832,15 +867,25 @@ func emitCommand(b *bytes.Buffer, c plannedCmd, provideVar string) {
 	fmt.Fprintln(b, "\t\t}")
 }
 
-// flagHelp builds the cobra usage string. Format: "[type<format>] description (required)".
+// flagHelp builds the cobra usage string.
+// Format: "[type<format>] description (enum: a|b|c) (required)".
 // Empty type/format/description segments are dropped so trivial cases stay clean.
-func flagHelp(t, format, description string, required bool) string {
+// The redundant `[See details](/enums/Foo)` link the spec attaches to enum
+// params is stripped — the inlined `(enum: ...)` makes it dead weight.
+func flagHelp(t, format, description string, enum []string, required bool) string {
 	var prefix string
 	switch {
 	case t != "" && format != "":
 		prefix = "[" + t + "<" + format + ">] "
 	case t != "":
 		prefix = "[" + t + "] "
+	}
+	if len(enum) > 0 {
+		description = strings.TrimRight(seeDetailsLink.ReplaceAllString(description, ""), " .")
+		if description != "" {
+			description += " "
+		}
+		description += "(enum: " + strings.Join(enum, "|") + ")"
 	}
 	suffix := ""
 	if required {
@@ -899,11 +944,11 @@ func emitTxShortcut(b *bytes.Buffer, s txShortcut, provideVar string) {
 
 	for _, f := range s.TopFields {
 		fmt.Fprintf(b, "\t\t\tcmd.Flags().StringVar(&f_%s, %q, \"\", %q)\n",
-			goSafeIdent(f.DotPath), f.DotPath, flagHelp(f.Type, f.Format, f.Description, false))
+			goSafeIdent(f.DotPath), f.DotPath, flagHelp(f.Type, f.Format, f.Description, f.Enum, false))
 	}
 	for _, p := range s.Params {
 		fmt.Fprintf(b, "\t\t\tcmd.Flags().StringVar(&p_%s, %q, \"\", %q)\n",
-			goSafeIdent(p.DotPath), "params."+p.DotPath, flagHelp(p.Type, p.Format, p.Description, false))
+			goSafeIdent(p.DotPath), "params."+p.DotPath, flagHelp(p.Type, p.Format, p.Description, p.Enum, false))
 	}
 	fmt.Fprintln(b, `			cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")`)
 	fmt.Fprintln(b, `			cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")`)
