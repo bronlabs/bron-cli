@@ -20,12 +20,10 @@ import (
 // a wrapper that augments each balance with `usdPrice` and `usdValue` when
 // `--embed prices` is on. Falls through to the original RunE otherwise.
 //
-// Backend currently has no `includePrices` filter — this is a CLI-side
-// orchestration that joins three calls (`balances list`, `assets list`,
-// `symbols prices`) the same way a manual jq pipeline would. The asset
-// list is needed because `balances` returns assetId while `symbols prices`
-// keys by symbolId. Until /dictionary/asset-market-prices is fixed and the
-// spec regenerates, this 3-way merge is what gives us a single CLI command.
+// The backend has no `includePrices` filter on the balances endpoint, so this
+// is a CLI-side join: fetch balances, then call /dictionary/asset-market-prices
+// keyed by assetId. AssetMarketPrice already carries baseAssetId/quoteSymbolId
+// natively, so the merge is a single lookup per balance entry.
 func wrapBalancesListEmbedPrices(root *cobra.Command, gf *globalFlags) {
 	var bal *cobra.Command
 	for _, res := range root.Commands() {
@@ -107,53 +105,40 @@ func fetchBalances(ctx context.Context, cli *client.Client, cmd *cobra.Command) 
 	return result, nil
 }
 
-// fetchAssetPrices returns a map keyed by assetId. Joins the three sources
-// the public API exposes today: assets list (assetId↔symbolId mapping),
-// symbols prices (symbolId→price). Resolves both in parallel.
+// fetchAssetPrices returns a price-by-assetId map. /dictionary/asset-market-prices
+// already echoes baseAssetId on each row, so a single call covers what used to
+// take three (balances → assets list → symbol-market-prices) before the spec
+// fix in libs/datamodel + platform/public-api.
 func fetchAssetPrices(ctx context.Context, cli *client.Client, assetIds []string) (map[string]assetPrice, error) {
-	idsCSV := strings.Join(assetIds, ",")
-
-	type result struct {
-		v   interface{}
-		err error
+	var v interface{}
+	query := map[string]interface{}{"baseAssetIds": strings.Join(assetIds, ",")}
+	if err := cli.Do(ctx, "GET", "/dictionary/asset-market-prices", nil, nil, query, &v); err != nil {
+		return nil, err
 	}
-	assetsCh := make(chan result, 1)
-	pricesCh := make(chan result, 1)
-
-	go func() {
-		var v interface{}
-		err := cli.Do(ctx, "GET", "/dictionary/assets", nil, nil, map[string]interface{}{"assetIds": idsCSV}, &v)
-		assetsCh <- result{v, err}
-	}()
-	go func() {
-		var v interface{}
-		err := cli.Do(ctx, "GET", "/dictionary/symbol-market-prices", nil, nil, map[string]interface{}{"baseAssetIds": idsCSV}, &v)
-		pricesCh <- result{v, err}
-	}()
-
-	assets := <-assetsCh
-	prices := <-pricesCh
-	if assets.err != nil {
-		return nil, fmt.Errorf("fetch assets: %w", assets.err)
-	}
-	if prices.err != nil {
-		return nil, fmt.Errorf("fetch prices: %w", prices.err)
-	}
-
-	symbolByAsset := mapAssetIdToSymbolId(assets.v)
-	priceBySymbol := mapSymbolIdToPrice(prices.v)
 
 	out := map[string]assetPrice{}
-	for assetId, symbolId := range symbolByAsset {
-		if p, ok := priceBySymbol[symbolId]; ok {
-			out[assetId] = p
+	m, ok := v.(map[string]interface{})
+	if !ok {
+		return out, nil
+	}
+	prices, _ := m["prices"].([]interface{})
+	for _, item := range prices {
+		pm, ok := item.(map[string]interface{})
+		if !ok {
+			continue
 		}
+		assetId, _ := pm["baseAssetId"].(string)
+		quoteSymbolId, _ := pm["quoteSymbolId"].(string)
+		price := numberAsString(pm["price"])
+		if assetId == "" || price == "" {
+			continue
+		}
+		out[assetId] = assetPrice{QuoteSymbolId: quoteSymbolId, Price: price}
 	}
 	return out, nil
 }
 
 type assetPrice struct {
-	SymbolId      string
 	QuoteSymbolId string
 	Price         string
 }
@@ -194,58 +179,9 @@ func castMapSlice(arr []interface{}) []map[string]interface{} {
 	return out
 }
 
-func mapAssetIdToSymbolId(v interface{}) map[string]string {
-	out := map[string]string{}
-	m, ok := v.(map[string]interface{})
-	if !ok {
-		return out
-	}
-	arr, _ := m["assets"].([]interface{})
-	for _, item := range arr {
-		am, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		assetId, _ := am["assetId"].(string)
-		symbolId, _ := am["symbolId"].(string)
-		if assetId != "" && symbolId != "" {
-			out[assetId] = symbolId
-		}
-	}
-	return out
-}
-
-func mapSymbolIdToPrice(v interface{}) map[string]assetPrice {
-	out := map[string]assetPrice{}
-	m, ok := v.(map[string]interface{})
-	if !ok {
-		return out
-	}
-	arr, _ := m["prices"].([]interface{})
-	for _, item := range arr {
-		pm, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		baseSymbolId, _ := pm["baseSymbolId"].(string)
-		quoteSymbolId, _ := pm["quoteSymbolId"].(string)
-		price := numberAsString(pm["price"])
-		if baseSymbolId == "" || price == "" {
-			continue
-		}
-		out[baseSymbolId] = assetPrice{
-			SymbolId:      baseSymbolId,
-			QuoteSymbolId: quoteSymbolId,
-			Price:         price,
-		}
-	}
-	return out
-}
-
 // mergeBalancePrices mutates the balances response in place: each item gets
-// `usdPrice` (raw price string), `usdQuoteSymbolId`, and `usdValue =
-// totalBalance * price` rendered with the same precision as totalBalance so
-// big.Rat output matches what users expect from --output table.
+// `usdPrice`, `usdQuoteSymbolId`, and `usdValue = totalBalance * price`
+// computed via big.Rat so trailing precision survives.
 func mergeBalancePrices(v interface{}, prices map[string]assetPrice) {
 	for _, b := range balanceItems(v) {
 		assetId, _ := b["assetId"].(string)
