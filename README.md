@@ -1,4 +1,4 @@
-# bron CLI
+# Bron CLI
 
 Public CLI for the [Bron](https://bron.org) API. Single static binary, generated from the OpenAPI spec.
 
@@ -26,9 +26,9 @@ The CLI talks to the Bron API with a per-key JWT signature. You generate a P-256
 bron auth keygen --out ~/.config/bron/keys/me.jwk
 
 # 2. paste the printed public JWK into the Bron UI to authorize this key (Bron returns nothing — the binding is by `kid`)
-...go to https://app.bron.org/settings/api-keys
+open https://app.bron.org/settings/api-keys # Settings -> API keys
 
-# 3. wire it into a profile (`init` activates the new profile automatically)
+# 3. wire it into a profile
 bron config init --name default --workspace <workspaceId> --key-file ~/.config/bron/keys/me.jwk
 
 # 4. sanity-check
@@ -113,14 +113,13 @@ Examples:
   bron tx accept-deposit-offer   <transactionId>
   bron tx reject-outgoing-offer  <transactionId>
 
-  # Pick a recipient — see `bron help addresses` for the full table:
-  #   --params.toAddress=<rawAddress>            on-chain address (raw)
-  #   --params.toAddressBookRecordId=<recordId>  pre-saved address-book entry (validated by Bron)
-  #   --params.toAccountId=<accountId>           internal transfer (instant, no fee path)
-  #   --params.toWorkspaceTag=<tag>              route to another Bron workspace
   bron tx withdrawal --accountId <accId> --externalId <idem> \
     --params.amount=100 --params.assetId=5000 --params.networkId=ETH \
     --params.toAddressBookRecordId=<recordId>
+    # --params.toAddress=<rawAddress>            on-chain address (raw)
+    # --params.toAddressBookRecordId=<recordId>  pre-saved address-book entry (validated by Bron)
+    # --params.toAccountId=<accountId>           internal transfer (instant, no fee path)
+    # --params.toWorkspaceTag=<tag>              route to another Bron workspace
 
   # Lower-level — when no "tx <type>" shortcut fits or you want full control:
   bron tx create \
@@ -307,8 +306,6 @@ make build              # incremental: regen if spec/cligen changed, then go bui
 make generate           # force-run cligen against the OpenAPI spec
 make dist               # cross-compile darwin/linux × amd64/arm64 into bin/
 make test
-make lint               # golangci-lint
-make tidy
 ```
 
 `VERSION=<tag> make build` stamps the binary with `bron --version`.
@@ -318,3 +315,7 @@ Generated files (`generated/commands.go`, `helpdoc.go`, `spec.go`, `spec.json`) 
 ### Built on
 
 [`bron-sdk-go`](https://github.com/bronlabs/bron-sdk-go) provides JWT signing, the HTTP client (retries, `APIError`), and shared types. The CLI adds dynamic command dispatch, profile config, output formatting.
+
+## License
+
+MIT License - see LICENSE file for details.
