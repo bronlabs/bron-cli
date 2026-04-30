@@ -158,25 +158,7 @@ func uniqueAssetIds(v interface{}) []string {
 }
 
 func balanceItems(v interface{}) []map[string]interface{} {
-	switch t := v.(type) {
-	case map[string]interface{}:
-		if arr, ok := t["balances"].([]interface{}); ok {
-			return castMapSlice(arr)
-		}
-	case []interface{}:
-		return castMapSlice(t)
-	}
-	return nil
-}
-
-func castMapSlice(arr []interface{}) []map[string]interface{} {
-	out := make([]map[string]interface{}, 0, len(arr))
-	for _, item := range arr {
-		if m, ok := item.(map[string]interface{}); ok {
-			out = append(out, m)
-		}
-	}
-	return out
+	return mapItems(v, "balances")
 }
 
 // mergeBalancePrices mutates the balances response in place: each item gets

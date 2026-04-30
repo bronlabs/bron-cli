@@ -301,7 +301,7 @@ func printJSON(w io.Writer, v interface{}) error {
 func printYAML(w io.Writer, v interface{}) error {
 	enc := yaml.NewEncoder(w)
 	enc.SetIndent(2)
-	defer enc.Close()
+	defer func() { _ = enc.Close() }()
 	return enc.Encode(v)
 }
 
@@ -362,7 +362,7 @@ func asArray(v interface{}) ([]interface{}, bool) {
 func printKVTable(w io.Writer, v interface{}) error {
 	m, ok := v.(map[string]interface{})
 	if !ok {
-		fmt.Fprintln(w, v)
+		_, _ = fmt.Fprintln(w, v)
 		return nil
 	}
 	keys := sortedKeys(m)
@@ -377,7 +377,7 @@ func printKVTable(w io.Writer, v interface{}) error {
 	}
 	for _, k := range keys {
 		val, _ := getDotPath(m, k)
-		fmt.Fprintf(w, "%-*s  %s\n", width, k, formatTableCell(k, val))
+		_, _ = fmt.Fprintf(w, "%-*s  %s\n", width, k, formatTableCell(k, val))
 	}
 	return nil
 }
@@ -411,14 +411,14 @@ func printArrayTable(w io.Writer, arr []interface{}) error {
 		}
 	}
 	for i, k := range keys {
-		fmt.Fprintf(w, "%-*s  ", widths[i], truncCell(k, cellMax))
+		_, _ = fmt.Fprintf(w, "%-*s  ", widths[i], truncCell(k, cellMax))
 	}
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 	for _, row := range cells {
 		for i, c := range row {
-			fmt.Fprintf(w, "%-*s  ", widths[i], c)
+			_, _ = fmt.Fprintf(w, "%-*s  ", widths[i], c)
 		}
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w)
 	}
 	return nil
 }
@@ -489,7 +489,7 @@ func formatScalar(v interface{}) string {
 	case nil:
 		return ""
 	case string:
-		return t
+		return SanitizeForTerminal(t)
 	case json.Number:
 		return string(t)
 	case bool:
@@ -510,8 +510,37 @@ func formatScalar(v interface{}) string {
 		return fmt.Sprintf("[…%d]", len(t))
 	default:
 		b, _ := json.Marshal(v)
-		return string(b)
+		return SanitizeForTerminal(string(b))
 	}
+}
+
+// SanitizeForTerminal strips C0/C1 control bytes from a server-controlled
+// string before it lands in a human-readable terminal context (table cells,
+// stderr error fields). Without it, an attacker with workspace-write access
+// could embed `\x1b]0;evil\x07` (title hijack) or `\r` (overwrite earlier
+// columns) in account names / memos. JSON/YAML structured encoders escape
+// control chars natively, so this is only needed on the raw-print path.
+//
+// Keeps `\t` (column separator) and `\n` (line break in long strings).
+func SanitizeForTerminal(s string) string {
+	if !strings.ContainsAny(s, "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0b\x0c\x0d\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f\x7f") {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r == '\t' || r == '\n':
+			b.WriteRune(r)
+		case r < 0x20 || r == 0x7f:
+			// drop
+		case r >= 0x80 && r < 0xa0:
+			// drop C1 controls
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // formatTableCell renders a value for a table cell. Like formatScalar, but

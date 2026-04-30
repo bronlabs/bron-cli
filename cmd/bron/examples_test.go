@@ -154,6 +154,38 @@ func tokenizeShell(s string) []string {
 
 // --- validation ---
 
+// handwrittenTxVerbs lists `bron tx <verb>` commands that are NOT in
+// generated.HelpEntries (because they're hand-written in cmd/bron/, not
+// emitted by cligen). The map value is the set of valid flag names.
+var handwrittenTxVerbs = map[string]map[string]bool{
+	"subscribe": {
+		"accountId":           true,
+		"transactionStatuses": true,
+		"transactionTypes":    true,
+		"no-history":          true,
+		"correlation-id":      true,
+	},
+}
+
+func validateHandwrittenTxVerb(t *testing.T, loc string, rest []string, verb string, validFlags, globals map[string]bool) {
+	t.Helper()
+	for _, tok := range rest {
+		if !strings.HasPrefix(tok, "--") {
+			continue
+		}
+		flag, _ := splitFlagValue(tok)
+		if globals[flag] || systemFlag(flag) || validFlags[flag] {
+			continue
+		}
+		valid := make([]string, 0, len(validFlags))
+		for f := range validFlags {
+			valid = append(valid, f)
+		}
+		sort.Strings(valid)
+		t.Errorf("%s: unknown flag --%s on `bron tx %s`; valid: %s", loc, flag, verb, strings.Join(valid, ", "))
+	}
+}
+
 // systemCmds that don't go through HelpEntries.
 var systemCmds = map[string]bool{
 	"help":       true,
@@ -185,6 +217,12 @@ func validateSnippet(t *testing.T, s snippet, bodyLeaves bodyLeavesByRef, global
 		// Verb may be a real tx verb (list/get/...) or a transactionType.
 		if _, ok := generated.TxShortcuts[verb]; ok {
 			validateTxShortcut(t, loc, s.tokens, verb, globals)
+			return
+		}
+		// Hand-written tx children (cmd/bron/*.go, not from cligen) — validate
+		// flags against a curated allowlist instead of the generated entries.
+		if validators, ok := handwrittenTxVerbs[verb]; ok {
+			validateHandwrittenTxVerb(t, loc, s.tokens[3:], verb, validators, globals)
 			return
 		}
 		// fall through: validate as bron tx <verb>

@@ -87,7 +87,7 @@ func newConfigInitCmd() *cobra.Command {
 			return nil
 		},
 	}
-	c.Flags().StringVar(&name, "name", "", "profile name (default: prompt)")
+	c.Flags().StringVar(&name, "name", "", "profile name; if omitted, the CLI prompts for one (default: \"default\")")
 	c.Flags().StringVar(&workspace, "workspace", "", "workspace id")
 	c.Flags().StringVar(&baseURL, "base-url", "", "API base URL (defaults to https://api.bron.org)")
 	_ = c.Flags().MarkHidden("base-url")

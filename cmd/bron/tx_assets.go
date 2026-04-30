@@ -144,15 +144,7 @@ func uniqueTxAssetIds(v interface{}) []string {
 }
 
 func txItems(v interface{}) []map[string]interface{} {
-	switch t := v.(type) {
-	case map[string]interface{}:
-		if arr, ok := t["transactions"].([]interface{}); ok {
-			return castMapSlice(arr)
-		}
-	case []interface{}:
-		return castMapSlice(t)
-	}
-	return nil
+	return mapItems(v, "transactions")
 }
 
 // embedAssetsIntoTxs attaches the resolved Asset under `_embedded.asset` on

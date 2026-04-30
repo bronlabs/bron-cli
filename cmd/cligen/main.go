@@ -144,6 +144,18 @@ var txKeyOverrides = map[string]string{
 // guard fails generation if a future transactionType key collides with one.
 var reservedTxNames = []string{"subscribe"}
 
+// reservedEmbedTokens are hand-wired CLI-side `--embed` orchestrators in
+// cmd/bron/{balances_prices,tx_assets}.go. If the spec ever exposes an
+// includeXxx query param that camelises to one of these tokens, generation
+// fails — applyEmbed would otherwise route the same token through both the
+// orchestrator and the generated --includeXxx flag, double-firing.
+//
+// Each entry is the (resource, verb, token) triple the orchestrator owns.
+var reservedEmbedTokens = []struct{ resource, verb, token string }{
+	{"balances", "list", "prices"},
+	{"tx", "list", "assets"},
+}
+
 func collectTxShortcuts(spec rawSpec) []txShortcut {
 	reg := spec.Components.Schemas
 	create, ok := reg["CreateTransaction"]
@@ -706,6 +718,23 @@ func emit(plan []plannedCmd, shortcuts []txShortcut) ([]byte, error) {
 	for _, s := range shortcuts {
 		if verbsByResource["tx"][s.Key] {
 			return nil, fmt.Errorf("transactionType %q collides with `bron tx %s` verb — pick a different transactionType key or rename the verb", s.Key, s.Key)
+		}
+	}
+
+	// Guard against backend adding an includeXxx query param that camelises to
+	// the same kebab token as a hand-wired embed orchestrator. Two paths
+	// claiming the same token would silently double-fire at runtime.
+	for _, rsv := range reservedEmbedTokens {
+		for _, c := range plan {
+			if c.Resource != rsv.resource || c.Verb != rsv.verb {
+				continue
+			}
+			for _, q := range c.QueryParams {
+				if tok, ok := embedTokenFromInclude(q.Name); ok && tok == rsv.token {
+					return nil, fmt.Errorf("query param --%s on `bron %s %s` camelises to embed token %q which is hand-wired in cmd/bron/ — drop the orchestrator or rename one of the two",
+						q.Name, rsv.resource, rsv.verb, rsv.token)
+				}
+			}
 		}
 	}
 

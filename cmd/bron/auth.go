@@ -22,7 +22,7 @@ func newAuthCmd() *cobra.Command {
 
 func newAuthKeygenCmd() *cobra.Command {
 	var (
-		out    string
+		file   string
 		stdout bool
 	)
 	c := &cobra.Command{
@@ -43,7 +43,11 @@ func newAuthKeygenCmd() *cobra.Command {
 				return err
 			}
 
-			if stdout || out == "" {
+			if stdout || file == "" {
+				if file == "" && !stdout {
+					fmt.Fprintln(os.Stderr, "warning: no --file given — printing the private JWK to stdout. Save it to a 0600 file before closing this terminal, or re-run with `--file ~/.config/bron/keys/me.jwk` to write it directly.")
+					fmt.Fprintln(os.Stderr)
+				}
 				fmt.Fprint(os.Stderr, "\n-------------------------------------\n\n")
 				fmt.Fprint(os.Stderr, "Public JWK (send to Bron):\n\n")
 				fmt.Println(pub)
@@ -54,7 +58,7 @@ func newAuthKeygenCmd() *cobra.Command {
 				return nil
 			}
 
-			path, err := util.Expand(out)
+			path, err := util.Expand(file)
 			if err != nil {
 				return err
 			}
@@ -71,7 +75,7 @@ func newAuthKeygenCmd() *cobra.Command {
 			return nil
 		},
 	}
-	c.Flags().StringVarP(&out, "out", "o", "", "write private JWK to this file (mode 0600); leave empty to print both keys to stdout")
-	c.Flags().BoolVar(&stdout, "stdout", false, "print both keys to stdout (default if --out is empty)")
+	c.Flags().StringVarP(&file, "file", "f", "", "write private JWK to this file (mode 0600); leave empty to print both keys to stdout")
+	c.Flags().BoolVar(&stdout, "stdout", false, "print both keys to stdout (default if --file is empty)")
 	return c
 }

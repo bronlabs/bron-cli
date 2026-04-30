@@ -1,6 +1,6 @@
 # Bron CLI
 
-Public CLI for the [Bron](https://bron.org) API — a custody and treasury platform for digital assets. Single static binary, regenerated from the OpenAPI spec on every API release. Designed to be a first-class surface for both humans and LLM agents.
+Public CLI for the [Bron](https://bron.org) API — a non-custodial treasury management platform for digital assets. Single static binary, regenerated from the OpenAPI spec on every API release. Designed to be a first-class surface for both humans and LLM agents.
 
 Use it to script everything you do in the Bron UI: list accounts and balances, create and approve withdrawals, manage address books, query transaction history, set up automation. If you don't have a Bron account yet, [start here](https://bron.org).
 
@@ -14,16 +14,28 @@ If you only need a UI client, you don't need the CLI. It targets API consumers �
 
 ## Install
 
-### MacOS / Linux
+### MacOS / Linux (Homebrew)
 
 ```bash
 brew install bronlabs/apps/bron
+```
 
-# Pre-built binaries
-curl -L https://github.com/bronlabs/bron-cli/releases/latest/download/bron-darwin-arm64 -o /usr/local/bin/bron
+### Pre-built binary (any UNIX)
+
+Picks the right artifact for your OS/arch automatically. Available builds: `darwin-arm64`, `darwin-amd64`, `linux-arm64`, `linux-amd64`, `windows-amd64.exe`.
+
+```bash
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+curl -L "https://github.com/bronlabs/bron-cli/releases/latest/download/bron-${OS}-${ARCH}" -o /usr/local/bin/bron
 chmod +x /usr/local/bin/bron
+```
 
-# From source
+Windows: download `bron-windows-amd64.exe` from the [releases page](https://github.com/bronlabs/bron-cli/releases/latest) and put it on `%PATH%`.
+
+### From source
+
+```bash
 go install github.com/bronlabs/bron-cli/cmd/bron@latest
 ```
 
@@ -33,7 +45,7 @@ The CLI talks to the Bron API with a per-key JWT signature. You generate a P-256
 
 ```bash
 # 1. generate a keypair (private goes to a 0600 file, public is printed to stdout)
-bron auth keygen --out ~/.config/bron/keys/me.jwk
+bron auth keygen --file ~/.config/bron/keys/me.jwk
 
 # 2. paste the printed public JWK into the Bron UI to authorize this key (Bron returns nothing — the binding is by `kid`)
 open https://app.bron.org/settings/api-keys # Settings -> API keys
@@ -67,7 +79,7 @@ Examples:
   bron help <topic>                   # signing | profiles | output | body | errors | idempotency | agents
   bron help --schema                  # full CLI schema (every command + types) as one JSON
 
-  bron auth keygen --out ~/.config/bron/keys/me.jwk
+  bron auth keygen --file ~/.config/bron/keys/me.jwk
 
   bron config
   bron config init --workspace <workspaceId> --key-file ~/.config/bron/keys/me.jwk
@@ -182,13 +194,16 @@ Examples:
   bron completion install              # auto-detects $SHELL (zsh|bash|fish)
 
 Flags:
+      --cell-max int       max chars per table cell; 0 disables truncation (default 28)
       --columns string     comma-separated keys to keep, e.g. transactionId,status,createdAt (works for json/yaml/jsonl/table)
+      --embed string       comma list of related entities to embed in the response (e.g. prices,assets,events,permission-groups)
   -h, --help               help for bron
       --key-file string    path to JWK private key (overrides profile)
       --output string      output format: table|json|yaml|jsonl (default json)
       --profile string     config profile name
       --proxy string       HTTP/HTTPS proxy URL (overrides profile)
       --query string       JSONPath subset filter, e.g. .transactions[*].transactionId
+      --schema             print JSON schema (request + response) for the command instead of running it
   -v, --version            version for bron
       --workspace string   workspace id (overrides profile)
 
@@ -223,6 +238,24 @@ bron <resource> <verb> [<positional-id>...] [--<field>...] [--file <path> | --js
 
 Special case — `bron tx <type>` (e.g. `bron tx withdrawal`, `bron tx allowance`, `bron tx stake-delegation`): shortcut for `bron tx create --transactionType <type>`, with the type-specific body fields exposed as `--params.<field>`. List the available types and verbs with `bron tx --help`.
 
+## Live updates (`bron tx subscribe`)
+
+`bron tx subscribe` is "GET extended" — same filters as `bron tx list`, but the connection stays open. The server replays the historical match as the first batch, then streams live updates as they happen. Output is JSONL only (`--output` is ignored for this command); pipe to `jq` for any reshaping.
+
+```bash
+# Live-only, no history (recommended for long-running watchers).
+bron tx subscribe --no-history
+
+# Filter the same way you would on `bron tx list`.
+bron tx subscribe --no-history --transactionStatuses signing-required,waiting-approval
+bron tx subscribe --accountId <accountId> --transactionTypes withdrawal,bridge
+
+# Pipe to jq for any extra filtering / reshaping.
+bron tx subscribe --no-history | jq 'select(.status == "completed")'
+```
+
+Without `--no-history` the server replays everything matching the filters before going live — that can be a lot on a busy workspace. Pair with explicit filters or pass `--no-history` if you only care about new events.
+
 ## Output formats and queries
 
 ```bash
@@ -245,7 +278,11 @@ bron tx get <id>            --columns transactionId,status,params
 
 JSON output is colored when stdout is a TTY. Disable with `NO_COLOR=1`, force on with `FORCE_COLOR=1`.
 
+Table cells are truncated at 28 characters by default (long IDs/addresses get `…`). Override with `--cell-max <N>`; pass `--cell-max 0` to disable truncation entirely (useful when piping to scripts that need full values).
+
 `bron <resource> <verb> --schema` (or `bron help <resource> <verb> --schema`) prints the JSON schema (path/query params, body, every response status) — handy for AI agents or quick API exploration.
+
+The `--schema` output is OpenAPI 3.1; the wire shape is stable across the 0.x line. Major format migrations (e.g. OpenAPI 4) ship with a CLI major-version bump.
 
 For heavier transformations, pipe to `jq`:
 
@@ -297,13 +334,17 @@ Mapped from HTTP status:
 ## Agent-friendly help
 
 ```
-bron help                             # = bron --help
-bron help <resource>                  # list verbs for the resource
-bron help <resource> <verb>           # JSON schema dump (usage + flags + body + response)
-bron --output yaml help <r> <v>       # same dump in YAML
+bron help                                       # navigation page (topics + entry points)
+bron --help                                     # full root help (flags + examples)
+bron help <topic>                               # topic blurb (signing | profiles | output | body | errors | idempotency | agents)
+bron help <resource>                            # list verbs for the resource
+bron help <resource> <verb>                     # human help (same as `bron <r> <v> --help`)
+bron help <resource> <verb> --schema            # per-command JSON schema (machine-readable)
+bron help --schema                              # full CLI schema as one OpenAPI 3.1 document
+bron --output yaml help <r> <v> --schema        # same per-command dump in YAML
 ```
 
-`bron help <resource> <verb>` is the entry point for any tooling that wants to introspect the CLI without parsing freeform `--help` text.
+`--schema` is the entry point for any tooling that wants to introspect the CLI without parsing freeform `--help` text. Output is a strict OpenAPI 3.1 fragment; pipe to `jq` / `swagger-cli` / any spec consumer.
 
 ---
 
@@ -320,11 +361,19 @@ make test
 
 `VERSION=<tag> make build` stamps the binary with `bron --version`.
 
-Generated files (`generated/commands.go`, `helpdoc.go`, `spec.go`, `spec.json`) are gitignored — `make build` regenerates them from `bron-open-api-public.json`. `bin/` is gitignored too.
+Generated files (`generated/commands.go`, `helpdoc.go`, `spec.go`, `spec.json`) are committed alongside the spec so `go install github.com/bronlabs/bron-cli/cmd/bron@latest` works on a fresh clone. `make build` regenerates them via `cligen`; CI verifies they stay in sync with the spec. `bin/` is gitignored.
 
 ### Built on
 
 [`bron-sdk-go`](https://github.com/bronlabs/bron-sdk-go) provides JWT signing, the HTTP client (retries, `APIError`), and shared types. The CLI adds dynamic command dispatch, profile config, output formatting.
+
+## Versioning
+
+While on `0.x`, breaking changes may land in any minor bump. We treat the
+exit-code contract, flag/verb names, and the `--schema` output shape as the
+stable surface — best-effort across `0.x`, fully versioned across `1.x+`. Any
+intentional breaking change is called out in the release notes for the
+relevant tag on the [releases page](https://github.com/bronlabs/bron-cli/releases).
 
 ## License
 

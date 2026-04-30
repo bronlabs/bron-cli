@@ -38,12 +38,13 @@ func New(p *config.Profile) (*Client, error) {
 	}
 
 	if info, err := os.Stat(keyPath); err == nil {
-		// Warn (do not block) if the key file is group/world readable.
-		// Industry practice is mixed (SSH blocks, AWS doesn't); we surface
-		// the risk but trust the user's filesystem setup.
+		// Block (don't warn) on group/world-readable key files. SSH does the
+		// same; for a CLI that signs withdrawals it's the only safe default.
+		// Permission gives an attacker on a shared host enough to impersonate
+		// the workspace and move funds. Fix is one chmod away.
 		if info.Mode().Perm()&0o077 != 0 {
-			fmt.Fprintf(os.Stderr, "warning: key file %s has overly permissive mode %#o; recommended: chmod 600\n",
-				keyPath, info.Mode().Perm())
+			return nil, fmt.Errorf("key file %s has overly permissive mode %#o (group/world readable); run `chmod 600 %s` and retry",
+				keyPath, info.Mode().Perm(), keyPath)
 		}
 	}
 
@@ -71,6 +72,11 @@ func buildHTTPClient(proxyURL string) (*http.Client, error) {
 		u, err := url.Parse(proxyURL)
 		if err != nil {
 			return nil, fmt.Errorf("parse proxy URL %q: %w", proxyURL, err)
+		}
+		// url.Parse accepts "host:8080" without complaining and produces an
+		// empty Host — which silently drops the proxy and falls back to env.
+		if u.Scheme == "" || u.Host == "" {
+			return nil, fmt.Errorf("proxy URL %q must include scheme and host (e.g. http://user:pass@host:8080)", proxyURL)
 		}
 		transport.Proxy = http.ProxyURL(u)
 	}

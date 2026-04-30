@@ -5,8 +5,7 @@
 package auth
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ecdh"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -29,15 +28,23 @@ type KeyPair struct {
 }
 
 func GenerateKeyPair() (*KeyPair, error) {
-	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	priv, err := ecdh.P256().GenerateKey(rand.Reader)
 	if err != nil {
-		return nil, fmt.Errorf("generate ecdsa key: %w", err)
+		return nil, fmt.Errorf("generate ecdh key: %w", err)
 	}
 
-	// Random kid drawn from crypto/rand. The server uses kid to bind the public
-	// key to a workspace, so collisions across users have to be vanishingly
-	// unlikely — math/rand seeded from time would produce identical kids when
-	// two users run keygen in the same second.
+	// crypto/ecdh marshals P-256 public keys as 0x04 || X || Y (65 bytes,
+	// uncompressed SEC1). Slice off the 0x04 prefix and split into the two
+	// 32-byte coordinates — RFC 7518 §6.2.1.2 mandates fixed 32-byte width
+	// before base64url, so we never need to pad here.
+	pub := priv.PublicKey().Bytes()
+	if len(pub) != 65 || pub[0] != 0x04 {
+		return nil, fmt.Errorf("unexpected public key encoding: len=%d", len(pub))
+	}
+	x := base64.RawURLEncoding.EncodeToString(pub[1:33])
+	y := base64.RawURLEncoding.EncodeToString(pub[33:65])
+	d := base64.RawURLEncoding.EncodeToString(priv.Bytes())
+
 	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 	raw := make([]byte, 24)
 	if _, err := rand.Read(raw); err != nil {
@@ -48,17 +55,14 @@ func GenerateKeyPair() (*KeyPair, error) {
 		kid[i] = charset[int(b)%len(charset)]
 	}
 
-	x := base64.RawURLEncoding.EncodeToString(priv.PublicKey.X.Bytes())
-	y := base64.RawURLEncoding.EncodeToString(priv.PublicKey.Y.Bytes())
-
 	return &KeyPair{
 		Public:  JWK{Kty: "EC", Crv: "P-256", X: x, Y: y, Kid: string(kid)},
-		Private: JWK{Kty: "EC", Crv: "P-256", X: x, Y: y, D: base64.RawURLEncoding.EncodeToString(priv.D.Bytes()), Kid: string(kid)},
+		Private: JWK{Kty: "EC", Crv: "P-256", X: x, Y: y, D: d, Kid: string(kid)},
 		Kid:     string(kid),
 	}, nil
 }
 
-// MarshalJSON returns the JWK as compact JSON.
+// MarshalCompact returns the JWK as compact JSON.
 func (j JWK) MarshalCompact() (string, error) {
 	b, err := json.Marshal(j)
 	if err != nil {
@@ -67,7 +71,7 @@ func (j JWK) MarshalCompact() (string, error) {
 	return string(b), nil
 }
 
-// MarshalJSONIndent returns the JWK as pretty-printed JSON.
+// MarshalIndent returns the JWK as pretty-printed JSON.
 func (j JWK) MarshalIndent() (string, error) {
 	b, err := json.MarshalIndent(j, "", "  ")
 	if err != nil {

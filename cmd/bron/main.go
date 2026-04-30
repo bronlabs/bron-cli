@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -33,6 +32,7 @@ type globalFlags struct {
 	cellMax   int
 	embed     string
 	schema    bool
+	debug     bool
 }
 
 const rootLong = `Bron CLI — public API client.
@@ -44,7 +44,7 @@ const rootExample = `  bron help
   bron help <topic>                   # signing | profiles | output | body | errors | idempotency | agents
   bron help --schema                  # full CLI schema (every command + types) as one JSON
 
-  bron auth keygen --out ~/.config/bron/keys/me.jwk
+  bron auth keygen --file ~/.config/bron/keys/me.jwk
 
   bron config
   bron config init --workspace <workspaceId> --key-file ~/.config/bron/keys/me.jwk
@@ -179,21 +179,22 @@ func main() {
 			return
 		}
 		out := cmd.OutOrStdout()
+		fp := func(args ...interface{}) { _, _ = fmt.Fprintln(out, args...) }
 		if cmd.Long != "" {
-			fmt.Fprintln(out, cmd.Long)
-			fmt.Fprintln(out)
+			fp(cmd.Long)
+			fp()
 		}
 		if cmd.Example != "" {
-			fmt.Fprintln(out, "Examples:")
-			fmt.Fprintln(out, cmd.Example)
-			fmt.Fprintln(out)
+			fp("Examples:")
+			fp(cmd.Example)
+			fp()
 		}
 		if cmd.HasAvailableLocalFlags() {
-			fmt.Fprintln(out, "Flags:")
-			fmt.Fprint(out, cmd.LocalFlags().FlagUsages())
-			fmt.Fprintln(out)
+			fp("Flags:")
+			_, _ = fmt.Fprint(out, cmd.LocalFlags().FlagUsages())
+			fp()
 		}
-		fmt.Fprintln(out, `Use "bron <resource> <verb> --help" for any command's flags.`)
+		fp(`Use "bron <resource> <verb> --help" for any command's flags.`)
 	})
 	root.PersistentFlags().StringVar(&gf.profile, "profile", "", "config profile name")
 	root.PersistentFlags().StringVar(&gf.workspace, "workspace", "", "workspace id (overrides profile)")
@@ -207,6 +208,7 @@ func main() {
 	root.PersistentFlags().IntVar(&gf.cellMax, "cell-max", 28, "max chars per table cell; 0 disables truncation")
 	root.PersistentFlags().StringVar(&gf.embed, "embed", "", "comma list of related entities to embed in the response (e.g. events,settings,permission-groups). Each token routes to the matching backend includeXxx flag if the endpoint exposes one")
 	root.PersistentFlags().BoolVar(&gf.schema, "schema", false, "print JSON schema (request + response) for the command instead of running it")
+	root.PersistentFlags().BoolVar(&gf.debug, "debug", false, "print debug logs to stderr (envelope dumps, ping/pong, dial attempts) — useful for `bron tx subscribe` and other long-running commands")
 
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		output.SetFormat(gf.output)
@@ -214,11 +216,18 @@ func main() {
 		output.SetColumns(gf.columns)
 		output.SetCellMax(gf.cellMax)
 		applyEmbed(cmd, gf.embed)
-		// --schema on an api command → emit JSON schema instead of running.
 		if gf.schema {
 			r, v, ok := resourceVerbFor(cmd)
 			if !ok {
 				return nil
+			}
+			// `bron tx subscribe` is "GET extended" — same Req/Resp as
+			// `tx list` plus an open WebSocket. Fall back to the list
+			// entry's schema and tag it as a streaming command.
+			streaming := false
+			if r == "tx" && v == "subscribe" {
+				v = "list"
+				streaming = true
 			}
 			entry, ok := lookupEntry(r, v)
 			if !ok {
@@ -228,22 +237,17 @@ func main() {
 			if err != nil {
 				return err
 			}
-			// `bron tx <type> --schema` should reflect the discriminator-specific
-			// body shape, not the generic CreateTransaction wrapper. Swap the
-			// free-form `params` blob with the matching <Type>Params schema and
-			// pin transactionType in the body so machine consumers see the
-			// concrete request shape.
-			if parent := cmd.Parent(); parent != nil && parent.Name() == "tx" {
-				if sc, ok := generated.TxShortcuts[cmd.Name()]; ok && sc.ParamsRef != "" {
-					specializeTxBody(doc, cmd.Name(), sc.ParamsRef)
-					doc["usage"] = "bron tx " + cmd.Name()
-					doc["command"] = "tx " + cmd.Name()
+			if streaming {
+				if x, ok := doc["x-bron-cli"].(map[string]interface{}); ok {
+					x["streaming"] = "websocket"
+					x["command"] = "tx subscribe"
+					x["usage"] = "bron tx subscribe"
 				}
 			}
 			if err := output.Print(doc); err != nil {
 				return err
 			}
-			os.Exit(0)
+			return errSchemaHandled
 		}
 		return nil
 	}
@@ -304,15 +308,18 @@ func main() {
 	}
 
 	if err := root.Execute(); err != nil {
+		if errors.Is(err, errSchemaHandled) {
+			return
+		}
 		var apiErr *sdkhttp.APIError
 		if errors.As(err, &apiErr) {
-			fmt.Fprintf(os.Stderr, "error: %s\n", apiErr.Message)
+			fmt.Fprintf(os.Stderr, "error: %s\n", output.SanitizeForTerminal(apiErr.Message))
 			fmt.Fprintf(os.Stderr, "  status:   %d\n", apiErr.Status)
 			if apiErr.Code != "" {
-				fmt.Fprintf(os.Stderr, "  code:     %s\n", apiErr.Code)
+				fmt.Fprintf(os.Stderr, "  code:     %s\n", output.SanitizeForTerminal(apiErr.Code))
 			}
 			if apiErr.RequestID != "" {
-				fmt.Fprintf(os.Stderr, "  trace:    %s\n", apiErr.RequestID)
+				fmt.Fprintf(os.Stderr, "  trace:    %s\n", output.SanitizeForTerminal(apiErr.RequestID))
 				fmt.Fprintln(os.Stderr, "  (paste the trace ID into a support ticket — the backend logs it as Error ID)")
 			}
 			os.Exit(exitCodeForStatus(apiErr.Status))
@@ -321,6 +328,11 @@ func main() {
 		os.Exit(1)
 	}
 }
+
+// errSchemaHandled — sentinel returned by --schema's PersistentPreRunE so
+// main() can short-circuit cleanly. os.Exit(0) inside PersistentPreRunE would
+// bypass deferred test-harness cleanup.
+var errSchemaHandled = errors.New("schema handled")
 
 func buildClient(gf *globalFlags) (*client.Client, error) {
 	cfg, err := config.Load()
@@ -386,13 +398,13 @@ func newHelpCmd() *cobra.Command {
 			}
 			if len(args) == 1 {
 				if blurb, ok := topics[args[0]]; ok {
-					fmt.Fprintln(cmd.OutOrStdout(), blurb)
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), blurb)
 					return nil
 				}
 				if args[0] == "topics" {
-					fmt.Fprintln(cmd.OutOrStdout(), "Available topics (run `bron help <topic>`):")
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Available topics (run `bron help <topic>`):")
 					for _, n := range topicNames() {
-						fmt.Fprintln(cmd.OutOrStdout(), "  "+n)
+						_, _ = fmt.Fprintln(cmd.OutOrStdout(), "  "+n)
 					}
 					return nil
 				}
@@ -428,313 +440,36 @@ func printHelpNavigation(w io.Writer) error {
 	}
 	sort.Strings(resources)
 
-	fmt.Fprintln(w, "Bron CLI — help navigation. Pick a depth:")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "  bron --help                          full root help (flags + examples)")
-	fmt.Fprintln(w, "  bron <resource> <verb> --help        per-command help (flags + body schema + return shape)")
-	fmt.Fprintln(w, "  bron help <topic>                    topic blurb")
-	fmt.Fprintln(w, "  bron help <resource> <verb> --schema per-command JSON schema (machine-readable)")
-	fmt.Fprintln(w, "  bron help --schema                   full CLI schema (every command, every type)")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Topics (`bron help <topic>`):")
-	fmt.Fprintln(w, "  "+strings.Join(topicNames(), ", "))
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Resources (`bron <resource> --help`):")
-	fmt.Fprintln(w, "  "+strings.Join(resources, ", "))
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Tx shortcuts (`bron tx <type> --help`):")
 	tx := make([]string, 0, len(generated.TxShortcuts))
 	for k := range generated.TxShortcuts {
 		tx = append(tx, k)
 	}
 	sort.Strings(tx)
-	fmt.Fprintln(w, "  "+strings.Join(tx, ", "))
+
+	lines := []string{
+		"Bron CLI — help navigation. Pick a depth:",
+		"",
+		"  bron --help                          full root help (flags + examples)",
+		"  bron <resource> <verb> --help        per-command help (flags + body schema + return shape)",
+		"  bron help <topic>                    topic blurb",
+		"  bron help <resource> <verb> --schema per-command JSON schema (machine-readable)",
+		"  bron help --schema                   full CLI schema (every command, every type)",
+		"",
+		"Topics (`bron help <topic>`):",
+		"  " + strings.Join(topicNames(), ", "),
+		"",
+		"Resources (`bron <resource> --help`):",
+		"  " + strings.Join(resources, ", "),
+		"",
+		"Tx shortcuts (`bron tx <type> --help`):",
+		"  " + strings.Join(tx, ", "),
+	}
+	for _, l := range lines {
+		if _, err := fmt.Fprintln(w, l); err != nil {
+			return err
+		}
+	}
 	return nil
-}
-
-// buildFullSchemaDoc returns the embedded OpenAPI 3.1 spec verbatim, decorated
-// with bron-CLI specifics under the `x-bron-cli` extension. Verbatim because
-// the spec IS the source of truth — reshaping it loses information, and any
-// jq/swagger consumer already knows how to walk the standard structure.
-//
-// Under x-bron-cli we add:
-//   - commands[]: each (resource verb) → cli usage line + raw OpenAPI path/method
-//   - tx_shortcuts[]: synthetic `bron tx <type>` commands with their params class
-func buildFullSchemaDoc() (map[string]interface{}, error) {
-	var doc map[string]interface{}
-	if err := json.Unmarshal(generated.Spec, &doc); err != nil {
-		return nil, fmt.Errorf("decode embedded spec: %w", err)
-	}
-
-	type cmdDoc struct {
-		Command  string `json:"command"`
-		Usage    string `json:"usage"`
-		Method   string `json:"method"`
-		Path     string `json:"path"`
-		PathArgs []string `json:"path_args,omitempty"`
-	}
-	type txDoc struct {
-		Type      string   `json:"type"`
-		Usage     string   `json:"usage"`
-		ParamsRef string   `json:"params_ref"`
-		Params    []string `json:"params"`
-		TopFields []string `json:"top_fields"`
-	}
-
-	resources := make([]string, 0, len(generated.HelpEntries))
-	for r := range generated.HelpEntries {
-		resources = append(resources, r)
-	}
-	sort.Strings(resources)
-
-	commands := make([]cmdDoc, 0, 64)
-	for _, r := range resources {
-		verbs := make([]string, 0, len(generated.HelpEntries[r]))
-		for v := range generated.HelpEntries[r] {
-			verbs = append(verbs, v)
-		}
-		sort.Strings(verbs)
-		for _, v := range verbs {
-			e := generated.HelpEntries[r][v]
-			usage := "bron " + r + " " + v
-			for _, p := range e.PathArgs {
-				usage += " <" + p + ">"
-			}
-			commands = append(commands, cmdDoc{
-				Command:  r + " " + v,
-				Usage:    usage,
-				Method:   e.Method,
-				Path:     e.Path,
-				PathArgs: e.PathArgs,
-			})
-		}
-	}
-
-	txTypes := make([]string, 0, len(generated.TxShortcuts))
-	for t := range generated.TxShortcuts {
-		txTypes = append(txTypes, t)
-	}
-	sort.Strings(txTypes)
-	tx := make([]txDoc, 0, len(txTypes))
-	for _, t := range txTypes {
-		s := generated.TxShortcuts[t]
-		tx = append(tx, txDoc{
-			Type:      t,
-			Usage:     "bron tx " + t,
-			ParamsRef: s.ParamsRef,
-			Params:    s.Params,
-			TopFields: s.TopFields,
-		})
-	}
-
-	doc["x-bron-cli"] = map[string]interface{}{
-		"version":       Version,
-		"commands":      commands,
-		"tx_shortcuts":  tx,
-	}
-	return doc, nil
-}
-
-// appendReturnsHint prints a "Returns:" block at the bottom of help output for
-// api verb commands. It lists top-level properties of the response schema with
-// type and short description, expanding inline-arrays-of-refs by one level so
-// list endpoints show the item shape directly. For `bron tx <type>` it also
-// prints a `Body params: <Type>Params` block so the discriminator-specific
-// shape is visible alongside the generic CreateTransaction wrapper.
-func appendReturnsHint(cmd *cobra.Command) {
-	r, v, ok := resourceVerbFor(cmd)
-	if !ok {
-		return
-	}
-	entry, ok := lookupEntry(r, v)
-	if !ok {
-		return
-	}
-	out := cmd.OutOrStdout()
-
-	// `bron tx <type>` flag list already exposes --params.<...>, but a compact
-	// Body block summarises the chosen Params class with types/descriptions/
-	// examples in the same shape as Returns — handy reference next to the flags.
-	if parent := cmd.Parent(); parent != nil && parent.Name() == "tx" {
-		if sc, ok := generated.TxShortcuts[cmd.Name()]; ok && sc.ParamsRef != "" {
-			fmt.Fprintf(out, "\nBody params: %s\n", sc.ParamsRef)
-			printProps(out, topLevelProps(sc.ParamsRef, false), "  ")
-		}
-	}
-
-	tokens := append([]string(nil), entry.EmbedTokens...)
-	if r == "balances" && v == "list" {
-		tokens = append(tokens, "prices")
-	}
-	if r == "tx" && v == "list" {
-		tokens = append(tokens, "assets")
-	}
-	sort.Strings(tokens)
-	if len(tokens) > 0 {
-		fmt.Fprintf(out, "\nEmbed tokens (`--embed %s`): %s\n",
-			tokens[0], strings.Join(tokens, ", "))
-	}
-
-	if entry.ResponseRef == "" {
-		fmt.Fprintf(out, "\nFull schema: bron %s %s --schema\n", r, v)
-		return
-	}
-
-	props := topLevelProps(entry.ResponseRef, true)
-	fmt.Fprintf(out, "\nReturns: %s\n", entry.ResponseRef)
-	printProps(out, props, "  ")
-	fmt.Fprintf(out, "\nFull schema: bron %s %s --schema\n", r, v)
-}
-
-type schemaProp struct {
-	name, typ, desc, example string
-	sub                      []schemaProp // populated for `<Ref>[]` properties (one level deep)
-}
-
-func printProps(out io.Writer, props []schemaProp, indent string) {
-	if len(props) == 0 {
-		return
-	}
-	nameWidth, typeWidth := 0, 0
-	for _, p := range props {
-		if l := len(p.name); l > nameWidth {
-			nameWidth = l
-		}
-		if l := len(p.typ); l > typeWidth {
-			typeWidth = l
-		}
-	}
-	for _, p := range props {
-		desc := p.desc
-		if p.example != "" {
-			if desc == "" {
-				desc = "(e.g. " + p.example + ")"
-			} else {
-				desc = desc + " (e.g. " + p.example + ")"
-			}
-		}
-		if desc == "" {
-			fmt.Fprintf(out, "%s%-*s  %s\n", indent, nameWidth, p.name, p.typ)
-		} else {
-			fmt.Fprintf(out, "%s%-*s  %-*s  %s\n", indent, nameWidth, p.name, typeWidth, p.typ, desc)
-		}
-		if len(p.sub) > 0 {
-			printProps(out, p.sub, indent+"  ")
-		}
-	}
-}
-
-// topLevelProps returns the top-level properties of a named schema. When
-// expandArrays is true, properties shaped `<Ref>[]` get their sub items'
-// properties expanded one level deep (used to flesh out list endpoints
-// like `transactions: Transaction[]` → show Transaction's fields).
-func topLevelProps(name string, expandArrays bool) []schemaProp {
-	if name == "" {
-		return nil
-	}
-	v, err := resolveRef(name)
-	if err != nil {
-		return nil
-	}
-	m, ok := v.(map[string]interface{})
-	if !ok {
-		return nil
-	}
-	props, _ := m["properties"].(map[string]interface{})
-	keys := make([]string, 0, len(props))
-	for k := range props {
-		keys = append(keys, k)
-	}
-	sortStrings(keys)
-	out := make([]schemaProp, 0, len(keys))
-	for _, k := range keys {
-		pm, _ := props[k].(map[string]interface{})
-		sp := schemaProp{
-			name:    k,
-			typ:     schemaTypeLabel(pm),
-			desc:    firstLine(asString(pm["description"])),
-			example: firstExample(pm),
-		}
-		if expandArrays {
-			if t, _ := pm["type"].(string); t == "array" {
-				if items, ok := pm["items"].(map[string]interface{}); ok {
-					if ref, _ := items["$ref"].(string); ref != "" {
-						inner := strings.TrimPrefix(ref, "#/components/schemas/")
-						if inner != name {
-							sp.sub = topLevelProps(inner, false)
-						}
-					}
-				}
-			}
-		}
-		out = append(out, sp)
-	}
-	return out
-}
-
-// firstExample picks one example from an OpenAPI schema property. Supports both
-// `example: "..."` and `examples: ["...", ...]` shapes. Returns "" when neither
-// is set. DocsMacro emits string examples only — the spec never carries
-// non-string example shapes today, so we don't bother with json.Marshal fallbacks.
-func firstExample(pm map[string]interface{}) string {
-	if v, ok := pm["example"].(string); ok && v != "" {
-		return v
-	}
-	if arr, ok := pm["examples"].([]interface{}); ok {
-		for _, x := range arr {
-			if s, ok := x.(string); ok && s != "" {
-				return s
-			}
-		}
-	}
-	return ""
-}
-
-func schemaTypeLabel(m map[string]interface{}) string {
-	if m == nil {
-		return ""
-	}
-	if ref, ok := m["$ref"].(string); ok {
-		return strings.TrimPrefix(ref, "#/components/schemas/")
-	}
-	t, _ := m["type"].(string)
-	if t == "array" {
-		if items, ok := m["items"].(map[string]interface{}); ok {
-			return schemaTypeLabel(items) + "[]"
-		}
-		return "array"
-	}
-	if format, _ := m["format"].(string); format != "" && t != "" {
-		return t + "(" + format + ")"
-	}
-	if t == "" {
-		if _, ok := m["properties"]; ok {
-			return "object"
-		}
-		return ""
-	}
-	return t
-}
-
-func asString(v interface{}) string {
-	s, _ := v.(string)
-	return s
-}
-
-func firstLine(s string) string {
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		s = s[:i]
-	}
-	const max = 120
-	if len([]rune(s)) > max {
-		r := []rune(s)
-		return string(r[:max-1]) + "…"
-	}
-	return s
-}
-
-func sortStrings(s []string) {
-	sort.Strings(s)
 }
 
 // walkAPICommands invokes fn on every cobra command tagged with GroupID="api"
@@ -766,9 +501,6 @@ func resourceVerbFor(cmd *cobra.Command) (string, string, bool) {
 	}
 	parent := cmd.Parent()
 	if parent != nil && parent.Name() == "tx" {
-		// Either a real tx verb (`tx get`, `tx list`) or a transactionType
-		// create-shortcut (`tx withdrawal`). Shortcuts collapse to `tx create`
-		// so help and --schema reflect the underlying endpoint.
 		if _, isShortcut := generated.TxShortcuts[cmd.Name()]; isShortcut {
 			return "tx", "create", true
 		}
@@ -778,7 +510,6 @@ func resourceVerbFor(cmd *cobra.Command) (string, string, bool) {
 		return parent.Name(), cmd.Name(), true
 	}
 	if cmd.GroupID == "api" {
-		// Resource cmd (e.g. `bron accounts` aliased to list).
 		return cmd.Name(), "list", true
 	}
 	return "", "", false
@@ -789,9 +520,11 @@ func resourceVerbFor(cmd *cobra.Command) (string, string, bool) {
 // "includePermissionGroups". Unknown tokens print a stderr warning naming the
 // missing flag — silent no-ops are hard to debug for typos like "settngs".
 //
-// `prices` is a CLI-only token (no backend includeXxx flag yet); on
-// `bron balances list` it triggers a post-process that fetches asset prices
-// and merges them into the response. Skipped silently for any other command.
+// `prices` and `assets` are CLI-only tokens (no backend includeXxx flag yet);
+// each triggers a post-process orchestrator on its specific command. Skipped
+// silently for any other command. cligen guards at gen-time against an
+// `includeXxx` query param producing a colliding token, so the hand-wired and
+// generated paths can never both match the same token.
 func applyEmbed(cmd *cobra.Command, embed string) {
 	if embed == "" {
 		return
@@ -825,6 +558,10 @@ func applyEmbed(cmd *cobra.Command, embed string) {
 			}
 			upNext = false
 		}
+		if camel.Len() == 0 {
+			fmt.Fprintf(os.Stderr, "warning: --embed token %q has no alphanumeric content\n", tok)
+			continue
+		}
 		flagName := "include" + camel.String()
 		if f := cmd.Flags().Lookup(flagName); f != nil {
 			_ = cmd.Flags().Set(flagName, "true")
@@ -853,366 +590,17 @@ func lookupEntry(resource, verb string) (generated.HelpEntry, bool) {
 	return e, ok
 }
 
-func buildSchemaDoc(entry generated.HelpEntry) (map[string]interface{}, error) {
-	body, err := resolveRef(entry.BodyRef)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := resolveRef(entry.ResponseRef)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]interface{}{
-		"method":   entry.Method,
-		"path":     entry.Path,
-		"body":     body,
-		"response": resp,
-		"query":    queryFlagDocs(entry.QueryParams),
-	}, nil
-}
-
-// buildCommandHelpDoc emits a valid OpenAPI 3.1 fragment scoped to a single
-// command. Strict spec shape so agents/tools (jq, swagger viewer, OpenAPI
-// validators) can navigate it the same way they navigate the project's full
-// `bron-open-api-public.json`. Bron-CLI extras (the human command, extracted
-// permissions) live under the `x-bron-cli` extension namespace so the doc
-// stays valid OpenAPI.
-//
-// The components.schemas map is the transitive closure of refs reachable from
-// the operation — keeps the per-command payload small while still letting
-// consumers resolve every $ref locally without a second fetch.
-func buildCommandHelpDoc(resource, verb string, entry generated.HelpEntry) (map[string]interface{}, error) {
-	usage := "bron " + resource + " " + verb
-	for _, p := range entry.PathArgs {
-		usage += " <" + p + ">"
-	}
-
-	op, err := lookupOperation(entry.Method, entry.Path)
-	if err != nil {
-		return nil, err
-	}
-
-	description := ""
-	permissions := []string{}
-	if d, ok := op["description"].(string); ok {
-		description, permissions = stripPermissions(d)
-	}
-	if description != "" {
-		op["description"] = description
-	} else {
-		delete(op, "description")
-	}
-
-	schemas, err := closureSchemas(op)
-	if err != nil {
-		return nil, err
-	}
-
-	doc := map[string]interface{}{
-		"openapi": "3.1.0",
-		"info": map[string]interface{}{
-			"title":   usage,
-			"version": Version,
-		},
-		"paths": map[string]interface{}{
-			entry.Path: map[string]interface{}{
-				strings.ToLower(entry.Method): op,
-			},
-		},
-		"components": map[string]interface{}{
-			"schemas": schemas,
-		},
-		"x-bron-cli": map[string]interface{}{
-			"command": resource + " " + verb,
-			"usage":   usage,
-		},
-	}
-	if len(permissions) > 0 {
-		doc["x-bron-cli"].(map[string]interface{})["permissions"] = permissions
-	}
-	return doc, nil
-}
-
-// closureSchemas walks every $ref reachable from root and returns the named
-// component schemas it touches, transitively. Empty map is fine — used to
-// keep the per-command openapi fragment self-contained without dumping the
-// whole 250KB schema universe.
-func closureSchemas(root interface{}) (map[string]interface{}, error) {
-	var allSchemas struct {
-		Components struct {
-			Schemas map[string]json.RawMessage `json:"schemas"`
-		} `json:"components"`
-	}
-	if err := json.Unmarshal(generated.Spec, &allSchemas); err != nil {
-		return nil, fmt.Errorf("decode spec components: %w", err)
-	}
-	out := map[string]interface{}{}
-	queue := collectRefs(root)
-	for len(queue) > 0 {
-		name := queue[0]
-		queue = queue[1:]
-		if _, seen := out[name]; seen {
-			continue
-		}
-		raw, ok := allSchemas.Components.Schemas[name]
-		if !ok {
-			continue
-		}
-		var v interface{}
-		if err := json.Unmarshal(raw, &v); err != nil {
-			return nil, fmt.Errorf("decode schema %q: %w", name, err)
-		}
-		out[name] = v
-		queue = append(queue, collectRefs(v)...)
-	}
-	return out, nil
-}
-
-// collectRefs walks v and returns every component name reachable through
-// `$ref: #/components/schemas/<Name>`. Order is breadth-first, duplicates
-// allowed — caller dedupes via the visited map.
-func collectRefs(v interface{}) []string {
-	var out []string
-	var walk func(node interface{})
-	walk = func(node interface{}) {
-		switch t := node.(type) {
-		case map[string]interface{}:
-			if ref, ok := t["$ref"].(string); ok {
-				if name := strings.TrimPrefix(ref, "#/components/schemas/"); name != ref {
-					out = append(out, name)
-				}
-			}
-			for _, child := range t {
-				walk(child)
-			}
-		case []interface{}:
-			for _, item := range t {
-				walk(item)
-			}
-		}
-	}
-	walk(v)
-	return out
-}
-
-// collectDateKeysFromSpec scans the embedded OpenAPI spec for property names
-// whose schema declares `format: "date-time-millis"` and returns them as a set.
-// Output formatters use the set to humanize epoch-millis values to ISO-8601 UTC.
-//
-// One level of properties per top-level component schema is sufficient:
-// `@EpochMillis` is applied directly on Long fields in datamodel DTOs, each
-// DTO becomes its own component, and timestamp field names (createdAt,
-// expiresAt, etc.) are unique enough across the API that name-only matching
-// has no false positives. If a future change nests EpochMillis fields deeper
-// (e.g. inside an inline object property), expand this scan.
-func collectDateKeysFromSpec() map[string]bool {
-	keys := map[string]bool{}
-	var spec struct {
-		Components struct {
-			Schemas map[string]struct {
-				Properties map[string]struct {
-					Format string `json:"format"`
-					Items  struct {
-						Format string `json:"format"`
-					} `json:"items"`
-				} `json:"properties"`
-			} `json:"schemas"`
-		} `json:"components"`
-	}
-	if err := json.Unmarshal(generated.Spec, &spec); err != nil {
-		return keys
-	}
-	for _, schema := range spec.Components.Schemas {
-		for name, prop := range schema.Properties {
-			if prop.Format == "date-time-millis" || prop.Items.Format == "date-time-millis" {
-				keys[name] = true
-			}
-		}
-	}
-	return keys
-}
-
-// specializeTxBody mutates the schema doc for `bron tx <type> --schema` so the
-// body reflects the specific transactionType — pin the discriminator and
-// replace the free-form `params: ObjectNode` blob with the matching
-// <Type>Params schema. Best-effort; leaves doc untouched if anything is
-// missing or shaped unexpectedly.
-func specializeTxBody(doc map[string]interface{}, txType, paramsRef string) {
-	body, ok := doc["body"].(map[string]interface{})
-	if !ok {
-		return
-	}
-	props, ok := body["properties"].(map[string]interface{})
-	if !ok {
-		return
-	}
-	props["transactionType"] = map[string]interface{}{
-		"type":    "string",
-		"enum":    []interface{}{txType},
-		"example": txType,
-	}
-	paramsSchema, err := resolveRef(paramsRef)
-	if err == nil && paramsSchema != nil {
-		props["params"] = paramsSchema
-	}
-}
-
-// lookupOperation pulls the operation node for a (method, path) pair from the
-// embedded spec.
-func lookupOperation(method, path string) (map[string]interface{}, error) {
-	var spec struct {
-		Paths map[string]map[string]json.RawMessage `json:"paths"`
-	}
-	if err := json.Unmarshal(generated.Spec, &spec); err != nil {
-		return nil, fmt.Errorf("parse spec: %w", err)
-	}
-	pathItem, ok := spec.Paths[path]
-	if !ok {
-		return nil, fmt.Errorf("path %q not found in spec", path)
-	}
-	raw, ok := pathItem[strings.ToLower(method)]
-	if !ok {
-		return nil, fmt.Errorf("operation %s %s not found in spec", method, path)
-	}
-	var op map[string]interface{}
-	if err := json.Unmarshal(raw, &op); err != nil {
-		return nil, fmt.Errorf("decode operation %s %s: %w", method, path, err)
-	}
-	return op, nil
-}
-
-// stripPermissions extracts trailing "<sup>API Key permissions: A, B</sup>"
-// from a description and returns (cleanedDescription, permissionsList).
-func stripPermissions(desc string) (string, []string) {
-	const tagOpen = "<sup>API Key permissions: "
-	const tagClose = "</sup>"
-	i := strings.Index(desc, tagOpen)
-	if i < 0 {
-		return strings.TrimSpace(desc), nil
-	}
-	j := strings.Index(desc[i:], tagClose)
-	if j < 0 {
-		return strings.TrimSpace(desc), nil
-	}
-	perms := desc[i+len(tagOpen) : i+j]
-	clean := strings.TrimSpace(desc[:i])
-	parts := strings.Split(perms, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if s := strings.TrimSpace(p); s != "" {
-			out = append(out, s)
-		}
-	}
-	return clean, out
-}
-
-// splitParams classifies an OpenAPI parameters array into (path, query) and
-// drops the implicit `workspaceId` (always set by the CLI from the profile).
-func splitParams(raw interface{}) (path, query []map[string]interface{}) {
-	arr, ok := raw.([]interface{})
-	if !ok {
-		return nil, nil
-	}
-	for _, p := range arr {
-		m, ok := p.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		name, _ := m["name"].(string)
-		in, _ := m["in"].(string)
-		if in == "path" && name == "workspaceId" {
-			continue
-		}
-		entry := map[string]interface{}{"name": name, "required": m["required"] == true}
-		if d, ok := m["description"].(string); ok && d != "" {
-			entry["description"] = d
-		}
-		if s, ok := m["schema"]; ok {
-			entry["schema"] = s
-		}
-		switch in {
-		case "path":
-			path = append(path, entry)
-		case "query":
-			query = append(query, entry)
-		}
-	}
-	return path, query
-}
-
-// buildResponses turns the OpenAPI responses map into {status -> {description, schema}}.
-func buildResponses(raw interface{}) (map[string]interface{}, error) {
-	out := map[string]interface{}{}
-	m, ok := raw.(map[string]interface{})
-	if !ok {
-		return out, nil
-	}
-	for status, node := range m {
-		nm, ok := node.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		entry := map[string]interface{}{}
-		if d, ok := nm["description"].(string); ok && d != "" {
-			entry["description"] = d
-		}
-		if content, ok := nm["content"].(map[string]interface{}); ok {
-			if appJSON, ok := content["application/json"].(map[string]interface{}); ok {
-				if schema, ok := appJSON["schema"]; ok {
-					entry["schema"] = schema
-				}
-			}
-		}
-		out[status] = entry
-	}
-	return out, nil
-}
-
-func resolveRef(name string) (interface{}, error) {
-	if name == "" {
-		return nil, nil
-	}
-	var spec struct {
-		Components struct {
-			Schemas map[string]json.RawMessage `json:"schemas"`
-		} `json:"components"`
-	}
-	if err := json.Unmarshal(generated.Spec, &spec); err != nil {
-		return nil, fmt.Errorf("parse spec: %w", err)
-	}
-	raw, ok := spec.Components.Schemas[name]
-	if !ok {
-		return nil, fmt.Errorf("schema %q not found in spec", name)
-	}
-	var v interface{}
-	if err := json.Unmarshal(raw, &v); err != nil {
-		return nil, fmt.Errorf("decode schema %q: %w", name, err)
-	}
-	return v, nil
-}
-
-func queryFlagDocs(params []generated.HelpQueryParam) []map[string]interface{} {
-	if len(params) == 0 {
-		return nil
-	}
-	out := make([]map[string]interface{}, len(params))
-	for i, p := range params {
-		out[i] = map[string]interface{}{"name": p.Name, "required": p.Required}
-	}
-	return out
-}
-
 // exitCodeForStatus maps HTTP status onto the CLI's stable exit-code contract:
-// 3 = unauthorised (401/403), 4 = not found (404), 5 = bad request (400),
-// 6 = conflict (409), 7 = rate limited (429), 8 = server (5xx), 1 = anything
-// else. Documented in `bron help errors`.
+// 3 = unauthorised (401/403), 4 = not found (404/410), 5 = bad request
+// (400/422), 6 = conflict (409), 7 = rate limited (429), 8 = server (5xx),
+// 1 = anything else. Documented in `bron help errors`.
 func exitCodeForStatus(status int) int {
 	switch {
 	case status == 401, status == 403:
 		return 3
-	case status == 404:
+	case status == 404, status == 410:
 		return 4
-	case status == 400:
+	case status == 400, status == 422:
 		return 5
 	case status == 409:
 		return 6

@@ -1,5 +1,5 @@
-github.com/bronlabs/bron-sdk-go v0.1.13 h1:HEJuMhTH6hkC8TW7mpZjz4XPD0uJucF6EEf8W3T0kxA=
-github.com/bronlabs/bron-sdk-go v0.1.13/go.mod h1:QLyicgb8kgFuvS5SHIBHynBb6O6v+qS38ZKEL8FlVR8=
+github.com/bronlabs/bron-sdk-go v0.1.16 h1:+jiaNANT7pCFDZZw0ji0QuRRbI9bhR/9c3nXiLF24sU=
+github.com/bronlabs/bron-sdk-go v0.1.16/go.mod h1:HFhbaTYfO8TAFlBQx7v2LO6MfnWTuCBwNGNDsYU5N1Y=
 github.com/cpuguy83/go-md2man/v2 v2.0.4/go.mod h1:tgQtvFlXSQOSOSIRvRPT7W67SCa46tRHOmNcaadrF8o=
 github.com/golang-jwt/jwt/v5 v5.3.0 h1:pv4AsKCKKZuqlgs5sUmn4x8UlGa0kEVt/puTpKx9vvo=
 github.com/golang-jwt/jwt/v5 v5.3.0/go.mod h1:fxCRLWMO43lRc8nhHWY6LGqRcf+1gQWArsqaEUEa5bE=

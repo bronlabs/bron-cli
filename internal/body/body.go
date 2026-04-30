@@ -60,6 +60,23 @@ func Parse(file, inline string) (interface{}, error) {
 //
 // Returns nil when the resulting body is empty (no baseline, no flags).
 func Compose(baseline interface{}, fields map[string]string) (interface{}, error) {
+	hasFields := false
+	for _, raw := range fields {
+		if raw != "" {
+			hasFields = true
+			break
+		}
+	}
+
+	// Field flags only make sense on top of a JSON object. Bulk endpoints take
+	// arrays — silently merging --field flags into an empty map and returning
+	// it would drop the user's array baseline entirely, so refuse instead.
+	if hasFields && baseline != nil {
+		if _, ok := baseline.(map[string]interface{}); !ok {
+			return nil, fmt.Errorf("--<field> flags require a JSON object baseline; got %T (use --json/--file with an object body, or omit field flags)", baseline)
+		}
+	}
+
 	root, err := asObject(baseline)
 	if err != nil {
 		return nil, err
@@ -83,8 +100,9 @@ func Compose(baseline interface{}, fields map[string]string) (interface{}, error
 }
 
 // asObject returns a deep-copied map representation of baseline, or an empty
-// map if baseline is nil. Non-object baselines (arrays, scalars) come back as
-// empty so the caller can decide whether to keep the original.
+// map if baseline is nil/non-object. Compose has already rejected the
+// non-object-with-fields case, so callers reaching here only see empty maps
+// when the baseline was nil or also empty.
 func asObject(baseline interface{}) (map[string]interface{}, error) {
 	if baseline == nil {
 		return map[string]interface{}{}, nil

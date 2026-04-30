@@ -41,13 +41,14 @@ lint-fix:
 tidy:
 	$(GO) mod tidy
 
-# Cross-compiled release binaries: bin/bron-<os>-<arch>.
-PLATFORMS := darwin/amd64 darwin/arm64 linux/amd64 linux/arm64
+# Cross-compiled release binaries: bin/bron-<os>-<arch>[.exe].
+PLATFORMS := darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64
 dist: $(STAMP)
 	@mkdir -p bin
 	@for p in $(PLATFORMS); do \
 		os=$${p%/*}; arch=$${p#*/}; \
-		out=bin/bron-$$os-$$arch; \
+		ext=""; [ "$$os" = "windows" ] && ext=".exe"; \
+		out=bin/bron-$$os-$$arch$$ext; \
 		echo "→ $$out"; \
 		$(ENV) GOOS=$$os GOARCH=$$arch $(GO) build $(GOFLAGS) -ldflags='$(LDFLAGS)' -o $$out ./cmd/bron; \
 	done

@@ -38,7 +38,7 @@ Layout:
 			if err != nil {
 				return fmt.Errorf("create %s: %w", path, err)
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 
 			root := cmd.Root()
 			switch shell {
@@ -143,7 +143,7 @@ func isWritableDir(dir string) bool {
 		return false
 	}
 	name := f.Name()
-	f.Close()
+	_ = f.Close()
 	_ = os.Remove(name)
 	return true
 }

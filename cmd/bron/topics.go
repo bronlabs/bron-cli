@@ -12,7 +12,7 @@ Every request carries a short-lived JWT signed with your ES256 (P-256) private k
 The signature covers the HTTP method, path, query, body hash, and a fresh timestamp,
 so it is bound to that exact call and cannot be replayed.
 
-  • Generate a keypair locally:           bron auth keygen --out ~/.config/bron/keys/me.jwk
+  • Generate a keypair locally:           bron auth keygen --file ~/.config/bron/keys/me.jwk
   • Register the public JWK in Bron UI    (the binding is by "kid" inside the JWK).
   • Keep the private JWK on disk (0600);  point your profile at it via "key_file".
   • The CLI re-signs every request — no token caching, no revocation flow needed.
