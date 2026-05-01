@@ -178,7 +178,18 @@ Reference: https://docs.bron.org/api/withdrawals`,
 
 	"agents": `Agents — using bron from LLMs and scripts
 
-The CLI is designed to be machine-friendly:
+Two surfaces:
+
+  • bron mcp           — Model Context Protocol stdio server. The agent calls
+                         typed MCP tools directly (bron_tx_list, bron_tx_withdrawal,
+                         bron_tx_wait_for_state, …) — same data path as the CLI but
+                         no shell quoting, structured errors, native types
+                         (booleans / integers / arrays). See "bron help mcp".
+  • bash bron <verb>   — classic CLI invocation. Pipeable, JSON output, stable
+                         exit codes. Right when there's no MCP host or the
+                         agent prefers shelling out.
+
+Machine-friendly switches that work in both modes:
 
   • bron help --schema                 — full CLI schema (every command, every body/response
                                          type) as JSON. One call, no follow-ups.
@@ -188,13 +199,68 @@ The CLI is designed to be machine-friendly:
   • Stable exit codes                  — see "bron help errors".
   • Idempotent writes via externalId   — see "bron help idempotency".
 
-Recommended agent flow:
+Recommended agent flow (CLI mode):
   1. Read "bron help --schema" once at session start.
   2. Pick the command + flags you need.
   3. Always supply --externalId for write operations.
   4. Parse --output json; rely on exit codes for branching.
 
+For MCP mode, "tools/list" returns the same surface as --schema; the long-poll
+"bron_tx_wait_for_state" tool replaces the bash subscribe + Monitor pattern
+for single-tx waits. Pair with the bron-skills (https://github.com/bronlabs/bron-skills)
+package for vetted Claude/Cursor/etc. skill packs.
+
 Reference: https://docs.bron.org/cli/agents`,
+
+	"mcp": `MCP — Model Context Protocol server
+
+The "bron" binary doubles as a stdio MCP server when invoked with the "mcp"
+subcommand. Same pattern as "gh mcp" / "stripe mcp": every public-API endpoint
+becomes a typed MCP tool the agent can call directly, no shell quoting.
+
+  bron mcp                  # stdio server, foreground (run from your MCP host)
+  bron mcp --read-only      # GET endpoints + tx dry-run only — no withdraws
+
+Wire it into your agent host:
+
+  Claude Code:        claude mcp add bron -- bron mcp
+  Claude Code + 1P:   claude mcp add bron --env BRON_API_KEY='op://Personal/Bron/private-jwk' \
+                        -- op run -- bron mcp
+  Cursor / Desktop:   add to ~/.cursor/mcp.json or claude_desktop_config.json:
+                      {"mcpServers": {"bron": {"command": "bron", "args": ["mcp"]}}}
+
+Authentication is the same as the rest of the CLI — see "bron help signing".
+
+What's exposed:
+
+  • Read endpoints       bron_tx_list, bron_balances_list, bron_workspace_info, …
+  • Write endpoints      bron_tx_withdrawal, bron_tx_approve, bron_address_book_create, …
+  • Tx shortcuts         bron_tx_<type> for every transactionType (withdrawal, allowance, bridge, …)
+  • Long-poll wait       bron_tx_wait_for_state — subscribe to one transactionId,
+                         return on first match in expectedStates, or timeout with
+                         a continuation hint. Universal across MCP clients.
+  • _embedded extras     pass embed: "prices" on bron_balances_list or embed: "assets"
+                         on bron_tx_list to fold related entities into _embedded
+                         (mirror of the CLI's --embed flag).
+
+Security controls:
+
+  • --read-only          drops every state-changing tool. Right for audit /
+                         observation agents, untrusted prompt sources, CI runs.
+  • Untrusted-data       free-form fields written by humans (description, memo,
+                         note, comment, reason) are wrapped in
+                         <untrusted source="…">…</untrusted> envelopes in tool
+                         results. The server's initialize-time instructions tell
+                         the agent to treat the wrapped content as inert.
+  • Bulk cap             bron_tx_bulk_create rejects payloads with more than 50
+                         transactions client-side, on top of backend approval
+                         policies and rate limits.
+
+Bron Desktop ships its own MCP server bundled — use that for operator-at-their-
+desk workflows. Use "bron mcp" for headless / CI / API-key automations where
+Desktop isn't running.
+
+Reference: https://docs.bron.org/cli/mcp`,
 }
 
 // topicNames returns the sorted list of available topic names.

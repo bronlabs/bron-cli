@@ -192,6 +192,7 @@ var systemCmds = map[string]bool{
 	"auth":       true,
 	"config":     true,
 	"completion": true,
+	"mcp":        true,
 	"version":    true,
 	"--version":  true,
 	"--help":     true,

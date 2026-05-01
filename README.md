@@ -368,7 +368,7 @@ Mapped from HTTP status:
 ```
 bron help                                       # navigation page (topics + entry points)
 bron --help                                     # full root help (flags + examples)
-bron help <topic>                               # topic blurb (signing | profiles | output | body | errors | idempotency | agents)
+bron help <topic>                               # topic blurb (signing | profiles | output | body | errors | idempotency | agents | mcp)
 bron help <resource>                            # list verbs for the resource
 bron help <resource> <verb>                     # human help (same as `bron <r> <v> --help`)
 bron help <resource> <verb> --schema            # per-command JSON schema (machine-readable)

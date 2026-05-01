@@ -44,7 +44,7 @@ Resources follow the URL: bron <resource> <verb>. The <workspaceId> is implicit 
 
 const rootExample = `  bron help
   bron help <resource> <verb> [--output yaml]
-  bron help <topic>                   # signing | profiles | output | body | errors | idempotency | agents
+  bron help <topic>                   # signing | profiles | output | body | errors | idempotency | agents | mcp
   bron help --schema                  # full CLI schema (every command + types) as one JSON
 
   bron auth keygen --file ~/.config/bron/keys/me.jwk

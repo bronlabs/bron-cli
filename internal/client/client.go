@@ -68,21 +68,29 @@ func BuildHTTPClient(proxyURL string) (*http.Client, error) {
 }
 
 // redactProxy strips userinfo (user:password@) from a proxy URL so the
-// password never lands in error messages, logs, or panic traces. Falls back
-// to a static placeholder if the URL is malformed enough that url.Parse can't
-// recover a structured form.
+// password never lands in error messages, logs, or panic traces. Two paths:
+//
+//  1. url.Parse recognises a userinfo block (`u.User != nil`) — let
+//     url.Redacted handle it; this gets the canonical "scheme://user:xxxxx@host"
+//     output for well-formed URLs.
+//  2. The string contains an `@` but url.Parse didn't recover userinfo
+//     (malformed URL — no scheme, ambiguous shape, etc.). Manual scrub:
+//     replace everything before the last `@` with `***`. Without this fall-
+//     through `url.Parse("user:pass@host:8080")` returns `Scheme=user` and
+//     `User=nil`, so Redacted would echo the password verbatim.
 func redactProxy(raw string) string {
 	if raw == "" {
 		return raw
 	}
-	if u, err := url.Parse(raw); err == nil && u.Scheme != "" {
+	if u, err := url.Parse(raw); err == nil && u.User != nil {
 		return u.Redacted()
 	}
-	// url.Parse failed but the string may still contain "user:pass@" — strip
-	// anything before the last `@` defensively. Result loses scheme info but
-	// keeps the host, which is the diagnostic value we want.
 	if at := strings.LastIndexByte(raw, '@'); at >= 0 {
-		return "***@" + raw[at+1:]
+		scheme := ""
+		if i := strings.Index(raw, "://"); i >= 0 {
+			scheme = raw[:i+3]
+		}
+		return scheme + "***@" + raw[at+1:]
 	}
 	return raw
 }
