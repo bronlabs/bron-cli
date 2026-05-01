@@ -212,10 +212,11 @@ func newConfigShowCmd() *cobra.Command {
 				return err
 			}
 			out := map[string]interface{}{
-				"profile":   activeName,
-				"workspace": p.Workspace,
-				"base_url":  p.BaseURL,
-				"key_file":  p.KeyFile,
+				"profile":    activeName,
+				"workspace":  p.Workspace,
+				"base_url":   p.BaseURL,
+				"key_file":   p.KeyFile,
+				"key_source": describeKeySource(p),
 			}
 			if p.Proxy != "" {
 				out["proxy"] = p.Proxy
@@ -294,4 +295,20 @@ func firstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+// describeKeySource reports which slot in the resolved profile actually
+// supplies the JWK at signing time. Useful when the user has both
+// `BRON_API_KEY` set (e.g. via `op run`) and a `key_file:` in the YAML —
+// without this hint the displayed `key_file` field looks active even though
+// the env var wins.
+func describeKeySource(p *config.Profile) string {
+	switch {
+	case p.APIKey != "":
+		return "env BRON_API_KEY"
+	case p.KeyFile != "":
+		return "file " + p.KeyFile
+	default:
+		return "(none)"
+	}
 }

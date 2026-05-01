@@ -901,6 +901,9 @@ func emitCommand(b *bytes.Buffer, c plannedCmd, provideVar string) {
 		fmt.Fprintln(b, "\t\t\t\t\tif err != nil {")
 		fmt.Fprintln(b, "\t\t\t\t\t\treturn err")
 		fmt.Fprintln(b, "\t\t\t\t\t}")
+		fmt.Fprintln(b, "\t\t\t\t\tif err := qparam.CoerceBodyDates(payload); err != nil {")
+		fmt.Fprintln(b, "\t\t\t\t\t\treturn err")
+		fmt.Fprintln(b, "\t\t\t\t\t}")
 	} else {
 		fmt.Fprintln(b, "\t\t\t\t\tvar payload interface{}")
 	}
@@ -1012,6 +1015,9 @@ func emitTxShortcut(b *bytes.Buffer, s txShortcut, provideVar string) {
 	fmt.Fprintln(b, "\t\t\t\t\tif err != nil {")
 	fmt.Fprintln(b, "\t\t\t\t\t\treturn err")
 	fmt.Fprintln(b, "\t\t\t\t\t}")
+	fmt.Fprintln(b, "\t\t\t\t\tif err := qparam.CoerceBodyDates(payload); err != nil {")
+	fmt.Fprintln(b, "\t\t\t\t\t\treturn err")
+	fmt.Fprintln(b, "\t\t\t\t\t}")
 	fmt.Fprintln(b, "\t\t\t\t\tvar pathParams map[string]string")
 	fmt.Fprintln(b, "\t\t\t\t\tvar query interface{}")
 	fmt.Fprintln(b, "\t\t\t\t\tvar result interface{}")
@@ -1078,8 +1084,12 @@ func emitHelpDoc(plan []plannedCmd, shortcuts []txShortcut) ([]byte, error) {
 	fmt.Fprintln(&b, "}")
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "type HelpQueryParam struct {")
-	fmt.Fprintln(&b, "\tName     string")
-	fmt.Fprintln(&b, "\tRequired bool")
+	fmt.Fprintln(&b, "\tName        string")
+	fmt.Fprintln(&b, "\tRequired    bool")
+	fmt.Fprintln(&b, "\tType        string // OpenAPI type — \"string\" | \"integer\" | \"boolean\" | \"number\" | \"array\". \"string[]\" / \"integer[]\" for array of primitive.")
+	fmt.Fprintln(&b, "\tFormat      string // OpenAPI format — \"int64\" | \"date-time-millis\" | \"decimal\" | ...")
+	fmt.Fprintln(&b, "\tDescription string")
+	fmt.Fprintln(&b, "\tEnum        []string")
 	fmt.Fprintln(&b, "}")
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "type TxShortcut struct {")
@@ -1111,7 +1121,27 @@ func emitHelpDoc(plan []plannedCmd, shortcuts []txShortcut) ([]byte, error) {
 					if i > 0 {
 						fmt.Fprint(&b, ", ")
 					}
-					fmt.Fprintf(&b, "{Name: %q, Required: %t}", q.Name, q.Required)
+					fmt.Fprintf(&b, "{Name: %q, Required: %t", q.Name, q.Required)
+					if q.Type != "" {
+						fmt.Fprintf(&b, ", Type: %q", q.Type)
+					}
+					if q.Format != "" {
+						fmt.Fprintf(&b, ", Format: %q", q.Format)
+					}
+					if q.Description != "" {
+						fmt.Fprintf(&b, ", Description: %q", q.Description)
+					}
+					if len(q.Enum) > 0 {
+						fmt.Fprint(&b, ", Enum: []string{")
+						for j, e := range q.Enum {
+							if j > 0 {
+								fmt.Fprint(&b, ", ")
+							}
+							fmt.Fprintf(&b, "%q", e)
+						}
+						fmt.Fprint(&b, "}")
+					}
+					fmt.Fprint(&b, "}")
 				}
 				fmt.Fprint(&b, "}")
 			}

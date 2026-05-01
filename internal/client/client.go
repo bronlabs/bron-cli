@@ -7,14 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
 	sdkhttp "github.com/bronlabs/bron-sdk-go/sdk/http"
 
 	"github.com/bronlabs/bron-cli/internal/config"
-	"github.com/bronlabs/bron-cli/internal/util"
 )
 
 type Client struct {
@@ -23,37 +21,19 @@ type Client struct {
 }
 
 // New builds an HTTP client backed by bron-sdk-go using the resolved profile.
-// The private key (JWK) is read from KeyFile. Workspace ID is interpolated
+// The private key (JWK) comes from `config.Profile.LoadKey` — either inline
+// from $BRON_API_KEY or read from KeyFile on disk. Workspace ID is interpolated
 // into request paths via Do().
 func New(p *config.Profile) (*Client, error) {
 	if p.Workspace == "" {
 		return nil, fmt.Errorf("workspace not set (configure ~/.config/bron/config.yaml or pass --workspace)")
 	}
-	if p.KeyFile == "" {
-		return nil, fmt.Errorf("api key file not set (configure ~/.config/bron/config.yaml or pass --key-file)")
-	}
-	keyPath, err := util.Expand(p.KeyFile)
+	keyBytes, err := p.LoadKey()
 	if err != nil {
 		return nil, err
 	}
 
-	if info, err := os.Stat(keyPath); err == nil {
-		// Block (don't warn) on group/world-readable key files. SSH does the
-		// same; for a CLI that signs withdrawals it's the only safe default.
-		// Permission gives an attacker on a shared host enough to impersonate
-		// the workspace and move funds. Fix is one chmod away.
-		if info.Mode().Perm()&0o077 != 0 {
-			return nil, fmt.Errorf("key file %s has overly permissive mode %#o (group/world readable); run `chmod 600 %s` and retry",
-				keyPath, info.Mode().Perm(), keyPath)
-		}
-	}
-
-	keyBytes, err := os.ReadFile(keyPath)
-	if err != nil {
-		return nil, fmt.Errorf("read key file %s: %w", keyPath, err)
-	}
-
-	httpClient, err := buildHTTPClient(p.Proxy)
+	httpClient, err := BuildHTTPClient(p.Proxy)
 	if err != nil {
 		return nil, err
 	}
@@ -61,26 +41,50 @@ func New(p *config.Profile) (*Client, error) {
 	return &Client{http: hc, WorkspaceID: p.Workspace}, nil
 }
 
-// buildHTTPClient returns an *http.Client whose Transport is a clone of
+// BuildHTTPClient returns an *http.Client whose Transport is a clone of
 // http.DefaultTransport with proxy resolution wired in:
 //   - if proxyURL is set, all traffic goes through it (supports user:pass@host:port)
 //   - otherwise, falls back to HTTP_PROXY / HTTPS_PROXY / NO_PROXY env vars
-func buildHTTPClient(proxyURL string) (*http.Client, error) {
+//
+// Exported so the MCP path can reuse the same transport (auth-validated proxy,
+// scheme/host check) when building the bron-sdk-go realtime client. Without
+// this the SDK's own proxy-string handling skips the validation pass.
+func BuildHTTPClient(proxyURL string) (*http.Client, error) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = http.ProxyFromEnvironment
 	if proxyURL != "" {
 		u, err := url.Parse(proxyURL)
 		if err != nil {
-			return nil, fmt.Errorf("parse proxy URL %q: %w", proxyURL, err)
+			return nil, fmt.Errorf("parse proxy URL %q: %w", redactProxy(proxyURL), err)
 		}
 		// url.Parse accepts "host:8080" without complaining and produces an
 		// empty Host — which silently drops the proxy and falls back to env.
 		if u.Scheme == "" || u.Host == "" {
-			return nil, fmt.Errorf("proxy URL %q must include scheme and host (e.g. http://user:pass@host:8080)", proxyURL)
+			return nil, fmt.Errorf("proxy URL %q must include scheme and host (e.g. http://user:pass@host:8080)", redactProxy(proxyURL))
 		}
 		transport.Proxy = http.ProxyURL(u)
 	}
 	return &http.Client{Timeout: 30 * time.Second, Transport: transport}, nil
+}
+
+// redactProxy strips userinfo (user:password@) from a proxy URL so the
+// password never lands in error messages, logs, or panic traces. Falls back
+// to a static placeholder if the URL is malformed enough that url.Parse can't
+// recover a structured form.
+func redactProxy(raw string) string {
+	if raw == "" {
+		return raw
+	}
+	if u, err := url.Parse(raw); err == nil && u.Scheme != "" {
+		return u.Redacted()
+	}
+	// url.Parse failed but the string may still contain "user:pass@" — strip
+	// anything before the last `@` defensively. Result loses scheme info but
+	// keeps the host, which is the diagnostic value we want.
+	if at := strings.LastIndexByte(raw, '@'); at >= 0 {
+		return "***@" + raw[at+1:]
+	}
+	return raw
 }
 
 // Do executes a request, substituting `{workspaceId}` and any other path

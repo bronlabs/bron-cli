@@ -202,6 +202,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					if err != nil {
 						return err
 					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
+						return err
+					}
 					var query interface{}
 					var result interface{}
 					if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/address-book-records", pathParams, payload, query, &result); err != nil {
@@ -690,6 +693,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					if err != nil {
 						return err
 					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
+						return err
+					}
 					var query interface{}
 					var result interface{}
 					if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/intents", pathParams, payload, query, &result); err != nil {
@@ -1128,6 +1134,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					if err != nil {
 						return err
 					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
+						return err
+					}
 					var query interface{}
 					var result interface{}
 					if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/{transactionId}/accept-deposit-offer", pathParams, payload, query, &result); err != nil {
@@ -1166,6 +1175,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					if err != nil {
 						return err
 					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
+						return err
+					}
 					var query interface{}
 					var result interface{}
 					if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/{transactionId}/approve", pathParams, payload, query, &result); err != nil {
@@ -1201,6 +1213,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					payload, err := body.Compose(baseline, fields)
 					if err != nil {
+						return err
+					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
 						return err
 					}
 					var query interface{}
@@ -1242,6 +1257,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					payload, err := body.Compose(baseline, fields)
 					if err != nil {
+						return err
+					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
 						return err
 					}
 					var query interface{}
@@ -1288,6 +1306,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					payload, err := body.Compose(baseline, fields)
 					if err != nil {
+						return err
+					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
 						return err
 					}
 					var query interface{}
@@ -1359,6 +1380,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					if err != nil {
 						return err
 					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
+						return err
+					}
 					var query interface{}
 					var result interface{}
 					if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/{transactionId}/decline", pathParams, payload, query, &result); err != nil {
@@ -1403,6 +1427,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					payload, err := body.Compose(baseline, fields)
 					if err != nil {
+						return err
+					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
 						return err
 					}
 					var query interface{}
@@ -1601,6 +1628,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					if err != nil {
 						return err
 					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
+						return err
+					}
 					var query interface{}
 					var result interface{}
 					if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/{transactionId}/reject-outgoing-offer", pathParams, payload, query, &result); err != nil {
@@ -1645,6 +1675,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					payload, err := body.Compose(baseline, fields)
 					if err != nil {
+						return err
+					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
 						return err
 					}
 					var pathParams map[string]string
@@ -1696,6 +1729,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					payload, err := body.Compose(baseline, fields)
 					if err != nil {
+						return err
+					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
 						return err
 					}
 					var pathParams map[string]string
@@ -1767,6 +1803,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					if err != nil {
 						return err
 					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
+						return err
+					}
 					var pathParams map[string]string
 					var query interface{}
 					var result interface{}
@@ -1829,6 +1868,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					payload, err := body.Compose(baseline, fields)
 					if err != nil {
+						return err
+					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
 						return err
 					}
 					var pathParams map[string]string
@@ -1898,6 +1940,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					if err != nil {
 						return err
 					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
+						return err
+					}
 					var pathParams map[string]string
 					var query interface{}
 					var result interface{}
@@ -1962,6 +2007,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					if err != nil {
 						return err
 					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
+						return err
+					}
 					var pathParams map[string]string
 					var query interface{}
 					var result interface{}
@@ -2018,6 +2066,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					payload, err := body.Compose(baseline, fields)
 					if err != nil {
+						return err
+					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
 						return err
 					}
 					var pathParams map[string]string
@@ -2077,6 +2128,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					payload, err := body.Compose(baseline, fields)
 					if err != nil {
+						return err
+					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
 						return err
 					}
 					var pathParams map[string]string
@@ -2143,6 +2197,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					if err != nil {
 						return err
 					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
+						return err
+					}
 					var pathParams map[string]string
 					var query interface{}
 					var result interface{}
@@ -2201,6 +2258,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					if err != nil {
 						return err
 					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
+						return err
+					}
 					var pathParams map[string]string
 					var query interface{}
 					var result interface{}
@@ -2255,6 +2315,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					payload, err := body.Compose(baseline, fields)
 					if err != nil {
+						return err
+					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
 						return err
 					}
 					var pathParams map[string]string
@@ -2314,6 +2377,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					if err != nil {
 						return err
 					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
+						return err
+					}
 					var pathParams map[string]string
 					var query interface{}
 					var result interface{}
@@ -2371,6 +2437,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					if err != nil {
 						return err
 					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
+						return err
+					}
 					var pathParams map[string]string
 					var query interface{}
 					var result interface{}
@@ -2426,6 +2495,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					payload, err := body.Compose(baseline, fields)
 					if err != nil {
+						return err
+					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
 						return err
 					}
 					var pathParams map[string]string
@@ -2509,6 +2581,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					payload, err := body.Compose(baseline, fields)
 					if err != nil {
+						return err
+					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
 						return err
 					}
 					var pathParams map[string]string

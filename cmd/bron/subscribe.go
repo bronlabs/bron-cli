@@ -17,10 +17,7 @@ import (
 
 	"github.com/bronlabs/bron-cli/internal/config"
 	"github.com/bronlabs/bron-cli/internal/output"
-	"github.com/bronlabs/bron-cli/internal/util"
 )
-
-var _ = (*types.Transaction)(nil) // keep types import for asMap signature
 
 // newTxSubscribeCmd builds `bron tx subscribe`.
 //
@@ -30,11 +27,10 @@ var _ = (*types.Transaction)(nil) // keep types import for asMap signature
 // signal handling, JSON-line output.
 func newTxSubscribeCmd(gf *globalFlags) *cobra.Command {
 	var (
-		accountID     string
-		statuses      string
-		txTypes       string
-		correlationID string
-		noHistory     bool
+		accountID string
+		statuses  string
+		txTypes   string
+		noHistory bool
 	)
 	cmd := &cobra.Command{
 		Use:   "subscribe",
@@ -74,13 +70,9 @@ Filter flags mirror the list endpoint: --accountId, --transactionStatuses,
 			if workspace == "" {
 				return fmt.Errorf("workspace not set")
 			}
-			keyPath, err := util.Expand(profile.KeyFile)
+			keyBytes, err := profile.LoadKey()
 			if err != nil {
 				return err
-			}
-			keyBytes, err := os.ReadFile(keyPath)
-			if err != nil {
-				return fmt.Errorf("read key file %s: %w", keyPath, err)
 			}
 
 			// Stay quiet on the happy reconnect path (instant 1-attempt
@@ -142,7 +134,6 @@ Filter flags mirror the list endpoint: --accountId, --transactionStatuses,
 	cmd.Flags().StringVar(&statuses, "transactionStatuses", "", "comma-separated status filter (e.g. signing-required,waiting-approval)")
 	cmd.Flags().StringVar(&txTypes, "transactionTypes", "", "comma-separated transactionType filter (e.g. withdrawal,bridge)")
 	cmd.Flags().BoolVar(&noHistory, "no-history", false, "skip initial replay of existing transactions; only stream live updates")
-	cmd.Flags().StringVar(&correlationID, "correlation-id", "", "correlation id for this subscription (auto-generated when empty)")
 	return cmd
 }
 
@@ -194,4 +185,3 @@ func asMap(v *types.Transaction) interface{} {
 	}
 	return out
 }
-

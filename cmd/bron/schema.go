@@ -414,16 +414,25 @@ func collectRefs(v interface{}) []string {
 	return out
 }
 
-// collectDateKeysFromSpec scans the embedded OpenAPI spec for property names
-// whose schema declares `format: "date-time-millis"` and returns them as a set.
-// Output formatters use the set to humanize epoch-millis values to ISO-8601 UTC.
+// collectDateKeysFromSpec scans the embedded OpenAPI spec for every name that
+// the spec declares as `format: "date-time-millis"` (the OpenAPI translation
+// of the backend's `@EpochMillis` marker) and returns them as a set.
 //
-// One level of properties per top-level component schema is sufficient:
-// `@EpochMillis` is applied directly on Long fields in datamodel DTOs, each
-// DTO becomes its own component, and timestamp field names (createdAt,
-// expiresAt, etc.) are unique enough across the API that name-only matching
-// has no false positives. If a future change nests EpochMillis fields deeper
+// Two scans are merged into one set:
+//   - response/body shapes — `components.schemas[*].properties[*]`
+//   - request query/path params — `paths[*][<method>].parameters[]`
+//
+// One level of properties per component schema is sufficient: `@EpochMillis`
+// is applied directly on Long fields in datamodel DTOs, each DTO becomes its
+// own component, and timestamp names (createdAt, expiresAt, terminatedAtFrom,
+// updatedSince, ...) are unique enough across the API that name-only matching
+// has no false positives. If a future change nests `@EpochMillis` deeper
 // (e.g. inside an inline object property), expand this scan.
+//
+// The result drives both ends of the date pipeline:
+//   - request-side coercion (qparam.IsDateParam → MaybeDate, used by
+//     compactQuery on every CLI list-call and by mcp.go on body composition);
+//   - response-side humanization (output.SetDateKeys → ISO-8601 rendering).
 func collectDateKeysFromSpec() map[string]bool {
 	keys := map[string]bool{}
 	var spec struct {
@@ -437,6 +446,17 @@ func collectDateKeysFromSpec() map[string]bool {
 				} `json:"properties"`
 			} `json:"schemas"`
 		} `json:"components"`
+		Paths map[string]map[string]struct {
+			Parameters []struct {
+				Name   string `json:"name"`
+				Schema struct {
+					Format string `json:"format"`
+					Items  struct {
+						Format string `json:"format"`
+					} `json:"items"`
+				} `json:"schema"`
+			} `json:"parameters"`
+		} `json:"paths"`
 	}
 	if err := json.Unmarshal(generated.Spec, &spec); err != nil {
 		return keys
@@ -445,6 +465,15 @@ func collectDateKeysFromSpec() map[string]bool {
 		for name, prop := range schema.Properties {
 			if prop.Format == "date-time-millis" || prop.Items.Format == "date-time-millis" {
 				keys[name] = true
+			}
+		}
+	}
+	for _, methods := range spec.Paths {
+		for _, op := range methods {
+			for _, p := range op.Parameters {
+				if p.Schema.Format == "date-time-millis" || p.Schema.Items.Format == "date-time-millis" {
+					keys[p.Name] = true
+				}
 			}
 		}
 	}

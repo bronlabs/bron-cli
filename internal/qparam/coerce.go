@@ -1,31 +1,55 @@
 // Package qparam normalizes URL query-parameter values before they hit the wire.
 //
-// Currently it covers date parameters: the public API accepts millisecond-epoch
-// integers, but humans prefer to type ISO-8601 ("2026-04-01T00:00:00Z" or
-// "2026-04-01"). MaybeDate detects parameters whose names imply a timestamp
-// (suffixes "AtFrom", "AtTo", "Since", "Before", "After") and converts ISO-8601
-// inputs to millisecond strings; numeric inputs pass through unchanged.
+// Covers `@EpochMillis` timestamp fields: the public API accepts millisecond-
+// epoch integers (Long on the JVM side), but humans and agents prefer ISO-8601
+// ("2026-04-01T00:00:00Z" or "2026-04-01"). MaybeDate detects parameters and
+// body fields that the spec marks with `format: "date-time-millis"` and
+// converts ISO-8601 inputs to millisecond strings; numeric inputs pass through
+// unchanged.
+//
+// The set of recognized date-keyed names is loaded at startup from the
+// embedded OpenAPI spec via SetDateKeys — there is no hardcoded suffix list,
+// so any new `@EpochMillis` field added on the backend automatically picks
+// up coercion as soon as `make spec` regenerates the SDK.
 package qparam
 
 import (
 	"fmt"
 	"strconv"
-	"strings"
+	"sync/atomic"
 	"time"
 )
 
-// dateSuffixes lists name suffixes that mark a param as a timestamp.
-// Match is case-sensitive — public API uses lowerCamelCase consistently.
-var dateSuffixes = []string{"AtFrom", "AtTo", "Since", "Before", "After"}
+// dateKeys holds the registered date-shaped field/parameter names. Stored as
+// an atomic.Pointer so SetDateKeys / IsDateParam are safe to call concurrently
+// (initialization happens once at startup, but tools may run goroutines).
+var dateKeys atomic.Pointer[map[string]bool]
 
-// looksLikeDate reports whether the parameter name carries a timestamp.
-func looksLikeDate(name string) bool {
-	for _, s := range dateSuffixes {
-		if strings.HasSuffix(name, s) {
-			return true
-		}
+// SetDateKeys registers the set of field/parameter names whose values should
+// be coerced from ISO-8601 to epoch-millis. Idempotent — call once at startup
+// with the union of body-property names + query-parameter names extracted
+// from the spec.
+//
+// Pass an empty/nil map to disable coercion entirely (mainly useful in tests
+// that exercise the raw passthrough path).
+func SetDateKeys(set map[string]bool) {
+	if set == nil {
+		set = map[string]bool{}
 	}
-	return false
+	dateKeys.Store(&set)
+}
+
+// IsDateParam reports whether the parameter / field name carries a timestamp,
+// per the spec-driven registry populated by SetDateKeys.
+func IsDateParam(name string) bool {
+	if name == "" {
+		return false
+	}
+	keys := dateKeys.Load()
+	if keys == nil {
+		return false
+	}
+	return (*keys)[name]
 }
 
 // MaybeDate coerces a value if the param name implies a timestamp.
@@ -37,7 +61,7 @@ func looksLikeDate(name string) bool {
 //
 // Non-date params return the input unchanged.
 func MaybeDate(name, value string) (string, error) {
-	if value == "" || !looksLikeDate(name) {
+	if value == "" || !IsDateParam(name) {
 		return value, nil
 	}
 	if isAllDigits(value) {
@@ -59,6 +83,55 @@ func isAllDigits(s string) bool {
 		}
 	}
 	return true
+}
+
+// CoerceBodyDates walks a JSON-shaped value tree and rewrites every
+// timestamp-shaped field (per IsDateParam) from ISO-8601 to epoch-millis as a
+// string. Mirrors what compactQuery does for URL query params; lets the
+// CLI-generated write path (cligen-emitted body.Compose calls) accept ISO-8601
+// in `--params.expiresAt` flags and the MCP path accept it in JSON body
+// values, both transparently.
+//
+// Recurses into nested maps and arrays; mutates in place. No-op on nil or
+// non-object roots — safe to call after Compose returned a typed Go scalar.
+func CoerceBodyDates(payload interface{}) error {
+	if payload == nil {
+		return nil
+	}
+	m, ok := payload.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	return coerceMap(m)
+}
+
+func coerceMap(m map[string]interface{}) error {
+	for k, v := range m {
+		if s, ok := v.(string); ok && IsDateParam(k) {
+			coerced, err := MaybeDate(k, s)
+			if err != nil {
+				return err
+			}
+			m[k] = coerced
+			continue
+		}
+		if nested, ok := v.(map[string]interface{}); ok {
+			if err := coerceMap(nested); err != nil {
+				return err
+			}
+			continue
+		}
+		if arr, ok := v.([]interface{}); ok {
+			for _, item := range arr {
+				if mm, ok := item.(map[string]interface{}); ok {
+					if err := coerceMap(mm); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func parseISO(s string) (time.Time, bool) {

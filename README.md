@@ -41,10 +41,10 @@ go install github.com/bronlabs/bron-cli/cmd/bron@latest
 
 ## Authentication
 
-The CLI talks to the Bron API with a per-key JWT signature. You generate a P-256 keypair locally, register the **public** half with Bron (UI → API keys), and keep the **private** half on disk.
+The CLI talks to the Bron API with a per-key JWT signature. You generate a P-256 keypair locally, register the **public** half with Bron (UI → API keys), and keep the **private** half on disk in a `0600` file (the CLI refuses to load anything more permissive).
 
 ```bash
-# 1. generate a keypair (private goes to a 0600 file, public is printed to stdout)
+# 1. generate a keypair (private goes to a file, public is printed to stdout)
 bron auth keygen --file ~/.config/bron/keys/me.jwk
 
 # 2. paste the printed public JWK into the Bron UI to authorize this key (Bron returns nothing — the binding is by `kid`)
@@ -58,7 +58,7 @@ bron config
 bron workspace info
 ```
 
-You can have multiple profiles (`--name staging` etc.) and switch with `bron config use-profile <name>`. Per-call overrides via `--profile`, `--workspace`, `--key-file`, `--proxy` or env vars (`BRON_PROFILE`, `BRON_WORKSPACE_ID`, `BRON_API_KEY_FILE`, `BRON_PROXY`).
+You can have multiple profiles (`--name staging` etc.) and switch with `bron config use-profile <name>`. Per-call overrides via `--profile`, `--workspace`, `--key-file`, `--proxy` or env vars (`BRON_PROFILE`, `BRON_WORKSPACE_ID`, `BRON_API_KEY` / `BRON_API_KEY_FILE`, `BRON_PROXY`). `BRON_API_KEY` carries the raw JWK bytes, intended for secret-store wrappers (`op run`, `vault`, …) that pipe the value at startup so it never lives on disk.
 
 If you sit behind an HTTP/HTTPS proxy: persist it once with `bron config set proxy=http://user:pass@host:8080`, or set `HTTPS_PROXY` / `HTTP_PROXY` in the environment — both are honored automatically.
 
@@ -213,13 +213,16 @@ Use "bron <resource> <verb> --help" for any command's flags.
 ### env overrides
 
 ```
-BRON_PROFILE=staging                            bron tx list
-BRON_WORKSPACE_ID=<workspaceId>                 bron tx list
-BRON_API_KEY_FILE=~/.config/bron/keys/other.jwk bron tx list
-BRON_PROXY=http://user:pass@proxy:8080          bron tx list
-HTTPS_PROXY=http://proxy:8080                   bron tx list  # standard env vars are honored too
-BRON_CONFIG=/tmp/cli.yaml                       bron config show
+BRON_PROFILE=staging                                 bron tx list
+BRON_WORKSPACE_ID=<workspaceId>                      bron tx list
+BRON_API_KEY_FILE=~/.config/bron/keys/other.jwk      bron tx list
+BRON_API_KEY="$(op read 'op://Personal/Bron/jwk')"   bron tx list   # raw JWK bytes; never lands on disk
+BRON_PROXY=http://user:pass@proxy:8080               bron tx list
+HTTPS_PROXY=http://proxy:8080                        bron tx list   # standard env vars are honored too
+BRON_CONFIG=/tmp/cli.yaml                            bron config show
 ```
+
+`BRON_API_KEY` (raw JWK bytes) wins over `BRON_API_KEY_FILE` and `key_file:` when both are set — pair it with a secret store (1Password, Vault, sops) so the private JWK never lives on disk. The CLI strips the var from its environment after reading, so child processes don't inherit it.
 
 ---
 
@@ -237,6 +240,35 @@ bron <resource> <verb> [<positional-id>...] [--<field>...] [--file <path> | --js
 - query parameters become `--<name>` flags; body fields become `--<field>` / `--<a>.<b>` flags
 
 Special case — `bron tx <type>` (e.g. `bron tx withdrawal`, `bron tx allowance`, `bron tx stake-delegation`): shortcut for `bron tx create --transactionType <type>`, with the type-specific body fields exposed as `--params.<field>`. List the available types and verbs with `bron tx --help`.
+
+## MCP server (`bron mcp`)
+
+`bron` doubles as a Model Context Protocol stdio server when invoked with the `mcp` subcommand — same pattern as `gh mcp` / `stripe mcp`. Every public-API endpoint the CLI knows about is exposed as a typed MCP tool (`bron_tx_list`, `bron_balances_list`, `bron_tx_withdrawal`, `bron_tx_approve`, …), plus a long-poll `bron_tx_wait_for_state` for waiting on a transaction's terminal state without polling.
+
+Auth follows the same precedence as the rest of the CLI: active profile, then env (`BRON_PROFILE`, `BRON_API_KEY` / `BRON_API_KEY_FILE`, `BRON_WORKSPACE_ID`, `BRON_BASE_URL`, `BRON_PROXY`).
+
+```bash
+# Claude Code
+claude mcp add bron -- bron mcp
+
+# Claude Code, with the JWK fetched on-demand from 1Password (never lands on disk)
+claude mcp add bron --env BRON_API_KEY='op://Personal/Bron/private-jwk' -- op run -- bron mcp
+
+# Cursor / Claude Desktop / VS Code — drop into your mcp.json:
+{
+  "mcpServers": {
+    "bron": { "command": "bron", "args": ["mcp"] }
+  }
+}
+```
+
+Pass `--read-only` to register only GET endpoints + `tx dry-run`. Use this for agents that should observe a workspace without being able to move funds (audit pipelines, untrusted prompt sources, CI runs):
+
+```bash
+claude mcp add bron-readonly -- bron mcp --read-only
+```
+
+Bron Desktop has its own built-in MCP server when installed — use that for operator-at-their-desk workflows. Use `bron mcp` for headless / CI / API-key automations where Desktop isn't running.
 
 ## Live updates (`bron tx subscribe`)
 
@@ -290,7 +322,7 @@ For heavier transformations, pipe to `jq`:
 bron tx list --output json | jq '.transactions[] | select(.status=="signed")'
 ```
 
-Date-shaped query parameters (names ending in `AtFrom`, `AtTo`, `Since`, `Before`, `After`) accept both ISO-8601 (`2026-04-01T00:00:00Z`, `2026-04-01`) and millisecond-epoch integers — the CLI normalizes to millis before sending.
+Date-shaped query parameters and body fields (anything the OpenAPI spec marks as `format: "date-time-millis"`) accept both ISO-8601 (`2026-04-01T00:00:00Z`, `2026-04-01`) and millisecond-epoch integers — the CLI normalizes to millis before sending. The set of recognized names is auto-derived from the embedded spec at startup, so any new `@EpochMillis` field added on the backend picks up coercion as soon as `make spec` regenerates the SDK — no hardcoded suffix list to drift.
 
 ## Body composition (write operations)
 

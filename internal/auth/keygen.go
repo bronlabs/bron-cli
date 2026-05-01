@@ -45,14 +45,24 @@ func GenerateKeyPair() (*KeyPair, error) {
 	y := base64.RawURLEncoding.EncodeToString(pub[33:65])
 	d := base64.RawURLEncoding.EncodeToString(priv.Bytes())
 
+	// 24-char alnum kid via rejection sampling — `b % 36` would be biased
+	// (256 % 36 ≠ 0; characters 0-3 ~12% more likely than 4-9). The kid is
+	// an opaque public identifier, not a secret, but unbiased sampling is
+	// cheap and avoids any future detectability concern.
 	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
-	raw := make([]byte, 24)
-	if _, err := rand.Read(raw); err != nil {
-		return nil, fmt.Errorf("generate kid: %w", err)
-	}
 	kid := make([]byte, 24)
-	for i, b := range raw {
-		kid[i] = charset[int(b)%len(charset)]
+	const maxByte = byte(256 - (256 % len(charset))) // 252 — largest multiple of 36 below 256
+	buf := make([]byte, 1)
+	for i := range kid {
+		for {
+			if _, err := rand.Read(buf); err != nil {
+				return nil, fmt.Errorf("generate kid: %w", err)
+			}
+			if buf[0] < maxByte {
+				kid[i] = charset[int(buf[0])%len(charset)]
+				break
+			}
+		}
 	}
 
 	return &KeyPair{

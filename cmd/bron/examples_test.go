@@ -339,15 +339,15 @@ func buildBodyLeaves(t *testing.T) bodyLeavesByRef {
 }
 
 type rawSchemaForLeaves struct {
-	Type       string                          `json:"type"`
-	Ref        string                          `json:"$ref"`
-	Properties map[string]rawSchemaForLeaves   `json:"properties"`
-	Items      *rawSchemaForLeaves             `json:"items"`
-	OneOf      []rawSchemaForLeaves            `json:"oneOf"`
-	AllOf      []rawSchemaForLeaves            `json:"allOf"`
-	AnyOf      []rawSchemaForLeaves            `json:"anyOf"`
-	Enum       []interface{}                   `json:"enum"`
-	Format     string                          `json:"format"`
+	Type       string                        `json:"type"`
+	Ref        string                        `json:"$ref"`
+	Properties map[string]rawSchemaForLeaves `json:"properties"`
+	Items      *rawSchemaForLeaves           `json:"items"`
+	OneOf      []rawSchemaForLeaves          `json:"oneOf"`
+	AllOf      []rawSchemaForLeaves          `json:"allOf"`
+	AnyOf      []rawSchemaForLeaves          `json:"anyOf"`
+	Enum       []interface{}                 `json:"enum"`
+	Format     string                        `json:"format"`
 }
 
 func leavesOf(name, prefix string, reg map[string]rawSchemaForLeaves, visited map[string]bool) []string {

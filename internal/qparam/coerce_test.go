@@ -7,6 +7,14 @@ import (
 )
 
 func TestMaybeDate(t *testing.T) {
+	SetDateKeys(map[string]bool{
+		"createdAtFrom":    true,
+		"createdAtTo":      true,
+		"terminatedAtFrom": true,
+		"updatedSince":     true,
+	})
+	t.Cleanup(func() { SetDateKeys(nil) })
+
 	iso := func(s string) string {
 		t.Helper()
 		layouts := []string{time.RFC3339, "2006-01-02"}

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/bronlabs/bron-cli/internal/auth"
 	"github.com/bronlabs/bron-cli/internal/util"
@@ -44,6 +45,17 @@ func newAuthKeygenCmd() *cobra.Command {
 			}
 
 			if stdout || file == "" {
+				// Refuse to print the private JWK to a redirected stdout
+				// (pipe, file, log capture) unless the user opts in
+				// explicitly with `--stdout`. Without this guard,
+				// `bron auth keygen | tee key.txt` lands the JWK in shell
+				// history, the piped target, journalctl, etc. — and a
+				// later `chmod 600` doesn't claw the secret back.
+				if !stdout && !term.IsTerminal(int(os.Stdout.Fd())) {
+					return fmt.Errorf("refusing to print private JWK to a non-terminal stdout: " +
+						"either pass `--file <path>` to write a 0600 file, " +
+						"or `--stdout` to acknowledge the redirect")
+				}
 				if file == "" && !stdout {
 					fmt.Fprintln(os.Stderr, "warning: no --file given — printing the private JWK to stdout. Save it to a 0600 file before closing this terminal, or re-run with `--file ~/.config/bron/keys/me.jwk` to write it directly.")
 					fmt.Fprintln(os.Stderr)

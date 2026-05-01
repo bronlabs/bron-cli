@@ -17,6 +17,14 @@ so it is bound to that exact call and cannot be replayed.
   • Keep the private JWK on disk (0600);  point your profile at it via "key_file".
   • The CLI re-signs every request — no token caching, no revocation flow needed.
 
+Key sources, highest precedence first:
+  • $BRON_API_KEY        raw JWK bytes — wins over the file paths. Pair with a
+                         secret store so the key never lands on disk:
+                         BRON_API_KEY=$(op read op://Personal/Bron/private-jwk) bron tx list
+                         For MCP: claude mcp add bron --env BRON_API_KEY=op://… -- op run -- bron mcp
+  • $BRON_API_KEY_FILE   path override (for CI when you ship a managed file)
+  • profile.key_file     ~/.config/bron/config.yaml — interactive default
+
 Reference: https://docs.bron.org/api/auth`,
 
 	"profiles": `Profiles — config + env overrides
@@ -27,7 +35,9 @@ Multiple profiles let you switch between environments without retyping flags.
 
 Resolution order (highest precedence first):
   1. --profile / --workspace / --key-file / --proxy / --base-url flags
-  2. BRON_PROFILE / BRON_WORKSPACE_ID / BRON_API_KEY_FILE / BRON_PROXY / BRON_BASE_URL env vars
+  2. BRON_PROFILE / BRON_WORKSPACE_ID / BRON_API_KEY / BRON_API_KEY_FILE / BRON_PROXY / BRON_BASE_URL env vars
+     (BRON_API_KEY carries raw JWK bytes and wins over BRON_API_KEY_FILE / key_file —
+      pair with "op run" / Vault / sops so the key never lands on disk)
   3. active_profile from YAML
   4. profile named "default"
 

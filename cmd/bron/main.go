@@ -4,10 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"sort"
 	"strings"
 
+	sdk "github.com/bronlabs/bron-sdk-go/sdk"
 	sdkhttp "github.com/bronlabs/bron-sdk-go/sdk/http"
 	"github.com/spf13/cobra"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/bronlabs/bron-cli/internal/client"
 	"github.com/bronlabs/bron-cli/internal/config"
 	"github.com/bronlabs/bron-cli/internal/output"
+	"github.com/bronlabs/bron-cli/internal/qparam"
 )
 
 var Version = "dev"
@@ -156,7 +159,9 @@ const rootExample = `  bron help
 func main() {
 	gf := &globalFlags{}
 
-	output.SetDateKeys(collectDateKeysFromSpec())
+	dateKeys := collectDateKeysFromSpec()
+	output.SetDateKeys(dateKeys)
+	qparam.SetDateKeys(dateKeys)
 
 	root := &cobra.Command{
 		Use:           "bron <resource> <verb> [<id>...] [flags]",
@@ -299,6 +304,10 @@ func main() {
 	configCmd.GroupID = "system"
 	root.AddCommand(configCmd)
 
+	mcpCmd := newMCPCmd(gf)
+	mcpCmd.GroupID = "system"
+	root.AddCommand(mcpCmd)
+
 	root.InitDefaultCompletionCmd()
 	for _, c := range root.Commands() {
 		if c.Name() == "completion" {
@@ -334,7 +343,11 @@ func main() {
 // bypass deferred test-harness cleanup.
 var errSchemaHandled = errors.New("schema handled")
 
-func buildClient(gf *globalFlags) (*client.Client, error) {
+// resolveProfile loads the YAML config, picks the right profile (per
+// `--profile` / `BRON_PROFILE` / active), and applies global-flag overrides
+// for workspace / base-url / key-file / proxy. Shared by `buildClient`
+// (REST-only) and `buildSDKClient` (REST + WS realtime).
+func resolveProfile(gf *globalFlags) (*config.Profile, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, err
@@ -350,12 +363,63 @@ func buildClient(gf *globalFlags) (*client.Client, error) {
 		profile.BaseURL = gf.baseURL
 	}
 	if gf.keyFile != "" {
+		// Explicit `--key-file` flag overrides any `BRON_API_KEY` env Resolve
+		// may have picked up. Otherwise the env-injected JWK silently wins
+		// and the flag is a no-op — confusing to debug, especially in CI
+		// where both are sometimes set.
 		profile.KeyFile = gf.keyFile
+		profile.APIKey = ""
 	}
 	if gf.proxy != "" {
 		profile.Proxy = gf.proxy
 	}
+	return profile, nil
+}
+
+func buildClient(gf *globalFlags) (*client.Client, error) {
+	profile, err := resolveProfile(gf)
+	if err != nil {
+		return nil, err
+	}
 	return client.New(profile)
+}
+
+// buildSDKClient builds the bron-sdk-go BronClient, wiring REST + WS realtime
+// transport. Used by composite MCP tools (e.g. `bron_tx_wait_for_state`) that
+// need WS subscriptions on top of the REST surface. The simpler `buildClient`
+// returns just the REST wrapper used by the auto-generated MCP tools.
+//
+// Reuses `client.BuildHTTPClient` so the proxy auth + scheme/host validation
+// in REST and WS transports stay identical (otherwise the SDK's own proxy
+// handling skips the validation pass and `proxy=host:8080` silently falls
+// back to env).
+func buildSDKClient(gf *globalFlags) (*sdk.BronClient, error) {
+	profile, err := resolveProfile(gf)
+	if err != nil {
+		return nil, err
+	}
+	if profile.Workspace == "" {
+		return nil, fmt.Errorf("workspace not set (configure ~/.config/bron/config.yaml or pass --workspace)")
+	}
+	keyBytes, err := profile.LoadKey()
+	if err != nil {
+		return nil, err
+	}
+	httpClient, err := client.BuildHTTPClient(profile.Proxy)
+	if err != nil {
+		return nil, err
+	}
+	opts := []sdk.ClientOption{sdk.WithNetHTTPClient(httpClient)}
+	if gf.debug {
+		h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})
+		opts = append(opts, sdk.WithRealtimeLogger(slog.New(h)))
+	}
+	return sdk.NewBronClientWithOptions(sdk.BronClientConfig{
+		APIKey:      strings.TrimSpace(string(keyBytes)),
+		WorkspaceID: profile.Workspace,
+		BaseURL:     profile.BaseURL,
+		Proxy:       profile.Proxy,
+	}, opts...), nil
 }
 
 // newHelpCmd replaces cobra's default help command. Modes:
