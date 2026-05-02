@@ -55,17 +55,3 @@ dist: $(STAMP)
 
 clean:
 	rm -rf bin/ generated/
-
-help:
-	@echo "Targets:"
-	@echo "  build       — incremental: regen if spec/cligen changed, then build bin/bron"
-	@echo "  build-fast  — always regen, then build (use after suspicious mtime issues)"
-	@echo "  dist        — cross-compile for darwin/linux × amd64/arm64 into bin/"
-	@echo "  generate    — force-run cligen against $(SPEC)"
-	@echo "  test        — go test ./..."
-	@echo "  lint        — golangci-lint run ./..."
-	@echo "  lint-fix    — golangci-lint --fix"
-	@echo "  tidy        — go mod tidy"
-	@echo "  clean       — remove bin/ and generated/"
-	@echo ""
-	@echo "Vars: VERSION=<tag> (default: dev)"
