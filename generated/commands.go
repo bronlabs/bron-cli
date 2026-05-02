@@ -1547,6 +1547,7 @@ func Register(root *cobra.Command, provide ClientProvider) {
 			res.AddCommand(cmd)
 		}
 		{
+			var q_transactionId string
 			var q_transactionIds string
 			var q_transactionTypes string
 			var q_accountTypes string
@@ -1602,6 +1603,7 @@ func Register(root *cobra.Command, provide ClientProvider) {
 						return err
 					}
 					query, err := compactQuery(map[string]interface{}{
+						"transactionId":                q_transactionId,
 						"transactionIds":               q_transactionIds,
 						"transactionTypes":             q_transactionTypes,
 						"accountTypes":                 q_accountTypes,
@@ -1639,6 +1641,7 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					return output.Print(result)
 				},
 			}
+			cmd.Flags().StringVar(&q_transactionId, "transactionId", "", "[string] Transaction ID")
 			cmd.Flags().StringVar(&q_transactionIds, "transactionIds", "", "[string[]] Comma-separated transaction ids")
 			cmd.Flags().StringVar(&q_transactionTypes, "transactionTypes", "", "[array] Comma-separated transaction types (enum: deposit|withdrawal|multi-withdrawal|negative-deposit|auto-withdrawal|allowance|defi|defi-message|address-activation|address-creation|stake-delegation|stake-undelegation|stake-claim|stake-withdrawal|stake-take-reward|stake-earn-reward|swap-lifi|intents|loyalty-lock|loyalty-unlock|loyalty-collect-rewards|canton-reward|nft-deposit|nft-withdrawal|nft-allowance|fiat-out|fiat-in|bridge)")
 			cmd.Flags().StringVar(&q_accountTypes, "accountTypes", "", "[array] Comma-separated account types (enum: vault)")
@@ -1968,8 +1971,10 @@ func Register(root *cobra.Command, provide ClientProvider) {
 			var p_data string
 			var p_externalBroadcast string
 			var p_feeLevel string
+			var p_method string
 			var p_networkId string
 			var p_origin string
+			var p_rawTransaction string
 			var p_rawTransactions string
 			var p_to string
 			var p_value string
@@ -1996,8 +2001,10 @@ func Register(root *cobra.Command, provide ClientProvider) {
 						"params.data":              p_data,
 						"params.externalBroadcast": p_externalBroadcast,
 						"params.feeLevel":          p_feeLevel,
+						"params.method":            p_method,
 						"params.networkId":         p_networkId,
 						"params.origin":            p_origin,
+						"params.rawTransaction":    p_rawTransaction,
 						"params.rawTransactions":   p_rawTransactions,
 						"params.to":                p_to,
 						"params.value":             p_value,
@@ -2022,14 +2029,16 @@ func Register(root *cobra.Command, provide ClientProvider) {
 			cmd.Flags().StringVar(&f_description, "description", "", "[string] The description of the transaction")
 			cmd.Flags().StringVar(&f_expiresAt, "expiresAt", "", "[string<date-time-millis>] Optional expiration time for the transaction")
 			cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
-			cmd.Flags().StringVar(&p_data, "params.data", "", "[string] ")
-			cmd.Flags().StringVar(&p_externalBroadcast, "params.externalBroadcast", "", "[boolean] ")
+			cmd.Flags().StringVar(&p_data, "params.data", "", "[string] Hex-encoded transaction data payload for contract interaction (EVM networks)")
+			cmd.Flags().StringVar(&p_externalBroadcast, "params.externalBroadcast", "", "[boolean] If true, the transaction will be broadcast externally by the client instead of the wallet")
 			cmd.Flags().StringVar(&p_feeLevel, "params.feeLevel", "", "[string] (enum: low|medium|high)")
+			cmd.Flags().StringVar(&p_method, "params.method", "", "[string] WalletConnect method name that defines the requested operation (e.g. eth_sendTransaction, solana_signTransaction)")
 			cmd.Flags().StringVar(&p_networkId, "params.networkId", "", "[string] ")
 			cmd.Flags().StringVar(&p_origin, "params.origin", "", "[string] Origin of defi operation")
-			cmd.Flags().StringVar(&p_rawTransactions, "params.rawTransactions", "", "[string[]] ")
-			cmd.Flags().StringVar(&p_to, "params.to", "", "[string] ")
-			cmd.Flags().StringVar(&p_value, "params.value", "", "[string] ")
+			cmd.Flags().StringVar(&p_rawTransaction, "params.rawTransaction", "", "[string] Fully formed serialized transaction to be signed or broadcast (used for TON network)")
+			cmd.Flags().StringVar(&p_rawTransactions, "params.rawTransactions", "", "[string[]] List of fully formed serialized transactions to be signed or broadcast (used for Solana network)")
+			cmd.Flags().StringVar(&p_to, "params.to", "", "[string] Recipient address for EVM-compatible transaction")
+			cmd.Flags().StringVar(&p_value, "params.value", "", "[string] Hex-encoded amount (EVM networks)")
 			cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
 			cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
 			cmd.MarkFlagsMutuallyExclusive("file", "json")
@@ -2951,8 +2960,10 @@ func Register(root *cobra.Command, provide ClientProvider) {
 				var p_data string
 				var p_externalBroadcast string
 				var p_feeLevel string
+				var p_method string
 				var p_networkId string
 				var p_origin string
+				var p_rawTransaction string
 				var p_rawTransactions string
 				var p_to string
 				var p_value string
@@ -2979,8 +2990,10 @@ func Register(root *cobra.Command, provide ClientProvider) {
 							"params.data":              p_data,
 							"params.externalBroadcast": p_externalBroadcast,
 							"params.feeLevel":          p_feeLevel,
+							"params.method":            p_method,
 							"params.networkId":         p_networkId,
 							"params.origin":            p_origin,
+							"params.rawTransaction":    p_rawTransaction,
 							"params.rawTransactions":   p_rawTransactions,
 							"params.to":                p_to,
 							"params.value":             p_value,
@@ -3005,14 +3018,16 @@ func Register(root *cobra.Command, provide ClientProvider) {
 				cmd.Flags().StringVar(&f_description, "description", "", "[string] The description of the transaction")
 				cmd.Flags().StringVar(&f_expiresAt, "expiresAt", "", "[string<date-time-millis>] Optional expiration time for the transaction")
 				cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
-				cmd.Flags().StringVar(&p_data, "params.data", "", "[string] ")
-				cmd.Flags().StringVar(&p_externalBroadcast, "params.externalBroadcast", "", "[boolean] ")
+				cmd.Flags().StringVar(&p_data, "params.data", "", "[string] Hex-encoded transaction data payload for contract interaction (EVM networks)")
+				cmd.Flags().StringVar(&p_externalBroadcast, "params.externalBroadcast", "", "[boolean] If true, the transaction will be broadcast externally by the client instead of the wallet")
 				cmd.Flags().StringVar(&p_feeLevel, "params.feeLevel", "", "[string] (enum: low|medium|high)")
+				cmd.Flags().StringVar(&p_method, "params.method", "", "[string] WalletConnect method name that defines the requested operation (e.g. eth_sendTransaction, solana_signTransaction)")
 				cmd.Flags().StringVar(&p_networkId, "params.networkId", "", "[string] ")
 				cmd.Flags().StringVar(&p_origin, "params.origin", "", "[string] Origin of defi operation")
-				cmd.Flags().StringVar(&p_rawTransactions, "params.rawTransactions", "", "[string[]] ")
-				cmd.Flags().StringVar(&p_to, "params.to", "", "[string] ")
-				cmd.Flags().StringVar(&p_value, "params.value", "", "[string] ")
+				cmd.Flags().StringVar(&p_rawTransaction, "params.rawTransaction", "", "[string] Fully formed serialized transaction to be signed or broadcast (used for TON network)")
+				cmd.Flags().StringVar(&p_rawTransactions, "params.rawTransactions", "", "[string[]] List of fully formed serialized transactions to be signed or broadcast (used for Solana network)")
+				cmd.Flags().StringVar(&p_to, "params.to", "", "[string] Recipient address for EVM-compatible transaction")
+				cmd.Flags().StringVar(&p_value, "params.value", "", "[string] Hex-encoded amount (EVM networks)")
 				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
 				cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
 				cmd.MarkFlagsMutuallyExclusive("file", "json")
