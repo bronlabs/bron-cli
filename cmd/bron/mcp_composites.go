@@ -13,6 +13,7 @@ import (
 	"github.com/bronlabs/bron-sdk-go/sdk/types"
 
 	"github.com/bronlabs/bron-cli/internal/client"
+	"github.com/bronlabs/bron-cli/internal/output"
 )
 
 // Client-side composites — hand-written MCP tools that orchestrate REST + WS
@@ -94,7 +95,7 @@ func registerTxWaitForState(server *mcp.Server, sdkClient *sdk.BronClient) {
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
-		return nil, wrapUntrustedFields(result), nil
+		return nil, wrapUntrustedFields(output.HumanizeDates(result)), nil
 	})
 }
 

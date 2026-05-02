@@ -28,6 +28,17 @@ func New(p *config.Profile) (*Client, error) {
 	if p.Workspace == "" {
 		return nil, fmt.Errorf("workspace not set (configure ~/.config/bron/config.yaml or pass --workspace)")
 	}
+	return newClient(p)
+}
+
+// NewForBootstrap is the workspace-less variant of New, intended for the
+// `bron config init` flow before we know which workspace this key is bound
+// to. Right for paths that don't carry `{workspaceId}` (e.g. GET /workspaces);
+// any path that needs interpolation will produce an unresolved literal,
+// which is the desired hard-fail signal for misuse.
+func NewForBootstrap(p *config.Profile) (*Client, error) { return newClient(p) }
+
+func newClient(p *config.Profile) (*Client, error) {
 	keyBytes, err := p.LoadKey()
 	if err != nil {
 		return nil, err

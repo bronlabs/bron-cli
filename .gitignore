@@ -1,4 +1,5 @@
 bin/
+/bron
 .idea/
 .DS_Store
 project/

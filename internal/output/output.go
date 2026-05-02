@@ -1,9 +1,10 @@
 // Package output renders API responses in one of four formats:
-// json (default), yaml, jsonl, table — optionally narrowed by --columns or
-// filtered by --query (a small JSONPath subset). Epoch-millis date fields
-// (anything with format=date-time-millis in the spec) are humanised to ISO-8601
-// across every format so jq pipelines and humans see the same readable
-// timestamp.
+// json (default), yaml, jsonl, table — optionally narrowed by --columns
+// (dotted-path projection). Heavier transformations belong on the right
+// of a `| jq` pipe — we deliberately don't ship a half-jq. Epoch-millis
+// date fields (anything with format=date-time-millis in the spec) are
+// humanised to ISO-8601 across every format so jq pipelines and humans
+// see the same readable timestamp.
 package output
 
 import (
@@ -24,7 +25,6 @@ import (
 // generated subcommands when they call Print.
 var (
 	format   = "json"
-	query    = ""
 	columns  []string
 	cellMax  = 28
 	dateKeys = map[string]bool{}
@@ -36,9 +36,6 @@ func SetFormat(f string) {
 		format = f
 	}
 }
-
-// SetQuery updates the global JSONPath query. Empty string disables filtering.
-func SetQuery(q string) { query = q }
 
 // SetColumns selects which fields to render in --output table. Comma-separated
 // list (e.g. "transactionId,status,createdAt"). Empty disables filtering.
@@ -73,15 +70,8 @@ func SetDateKeys(keys map[string]bool) {
 	}
 }
 
-// Print renders v according to the global format/query.
+// Print renders v according to the global format/columns.
 func Print(v interface{}) error {
-	if query != "" {
-		filtered, err := applyQuery(v, query)
-		if err != nil {
-			return err
-		}
-		v = filtered
-	}
 	f := strings.ToLower(format)
 	// Table renders columns through selectTableColumns (which already
 	// honors the global `columns` list); for json/yaml/jsonl we narrow
@@ -626,6 +616,17 @@ func sortedKeys(m map[string]interface{}) []string {
 	return keys
 }
 
+// UseColor reports whether ANSI colors should be used when writing to w.
+// Honors NO_COLOR (disable, any value) and FORCE_COLOR (enable, any value),
+// otherwise enables colors only for ttys. Exposed so other packages can match
+// the CLI's rendering rules without rewriting the detection logic.
+func UseColor(w io.Writer) bool { return useColor(w) }
+
+// ColorizeJSON wraps a pre-formatted JSON byte slice in the same ANSI color
+// scheme `--output json` uses (cyan keys, green strings, yellow numbers,
+// magenta bool/null). Pass through unchanged input that isn't a tty target.
+func ColorizeJSON(b []byte) []byte { return colorizeJSON(b) }
+
 // useColor reports whether ANSI colors should be used when rendering to w.
 // Honors NO_COLOR (disable, any value) and FORCE_COLOR (enable, any value).
 func useColor(w io.Writer) bool {
@@ -720,77 +721,3 @@ func colorizeJSON(b []byte) []byte {
 	return out.Bytes()
 }
 
-// applyQuery applies a simplified JSONPath subset:
-//
-//	.foo               object key
-//	.foo.bar           nested key
-//	.foo[0]            array index
-//	.foo[*]            map remaining selector over every element
-//	.foo[*].bar        same, then pick `.bar` from each
-func applyQuery(v interface{}, q string) (interface{}, error) {
-	q = strings.TrimSpace(q)
-	if q == "" || q == "." {
-		return v, nil
-	}
-	if !strings.HasPrefix(q, ".") {
-		return nil, fmt.Errorf("--query must start with '.': %s", q)
-	}
-	rest := q[1:]
-	cur := v
-	for rest != "" {
-		// Read the next selector: either a dotted key or [index|*].
-		if rest[0] == '[' {
-			j := strings.IndexByte(rest, ']')
-			if j < 0 {
-				return nil, fmt.Errorf("--query: unterminated [ in %s", q)
-			}
-			inner := rest[1:j]
-			rest = rest[j+1:]
-			arr, ok := cur.([]interface{})
-			if !ok {
-				return nil, fmt.Errorf("--query: cannot index %T with [%s]", cur, inner)
-			}
-			if inner == "*" {
-				out := make([]interface{}, 0, len(arr))
-				for _, item := range arr {
-					sub := item
-					if rest != "" {
-						v, err := applyQuery(sub, "."+strings.TrimPrefix(rest, "."))
-						if err != nil {
-							return nil, err
-						}
-						sub = v
-					}
-					out = append(out, sub)
-				}
-				return out, nil
-			}
-			n, err := strconv.Atoi(inner)
-			if err != nil {
-				return nil, fmt.Errorf("--query: invalid index [%s] — only [N] (integer) or [*] (all) are supported; --query is navigation only, use --columns or pipe to jq for filtering", inner)
-			}
-			if n < 0 || n >= len(arr) {
-				return nil, nil
-			}
-			cur = arr[n]
-			continue
-		}
-
-		// Dotted key.
-		end := len(rest)
-		for i := 0; i < len(rest); i++ {
-			if rest[i] == '.' || rest[i] == '[' {
-				end = i
-				break
-			}
-		}
-		key := rest[:end]
-		m, ok := cur.(map[string]interface{})
-		if !ok {
-			return nil, fmt.Errorf("--query: cannot index %T with %q", cur, key)
-		}
-		cur = m[key]
-		rest = strings.TrimPrefix(rest[end:], ".")
-	}
-	return cur, nil
-}

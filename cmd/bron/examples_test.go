@@ -451,7 +451,6 @@ func globalFlagSet() map[string]bool {
 		"key-file":  true,
 		"proxy":     true,
 		"output":    true,
-		"query":     true,
 		"columns":   true,
 		"cell-max":  true,
 		"embed":     true,

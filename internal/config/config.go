@@ -94,6 +94,34 @@ func (c *Config) Save() error {
 // FilePath returns the resolved on-disk location of this config.
 func (c *Config) FilePath() string { return c.path }
 
+// capturedAPIKey holds the BRON_API_KEY value that was present when the
+// process started. We strip the variable from the OS env immediately on
+// startup (see CaptureAPIKeyFromEnv, called from main()) so any subprocess
+// the CLI spawns later — `bron completion install`, `op run` shells,
+// debugger spawns, etc. — can never inherit the JWK. Subsequent calls to
+// Resolve read the cached value via apiKeyFromEnv().
+var capturedAPIKey string
+
+// CaptureAPIKeyFromEnv reads BRON_API_KEY once at process start and unsets
+// it from the OS env. Idempotent — only the first call captures; later
+// calls are no-ops. Must be invoked from main() before cobra dispatch and
+// before any code path that could spawn a subprocess.
+func CaptureAPIKeyFromEnv() {
+	if capturedAPIKey != "" {
+		return
+	}
+	if v := os.Getenv("BRON_API_KEY"); v != "" {
+		capturedAPIKey = v
+		_ = os.Unsetenv("BRON_API_KEY")
+	}
+}
+
+// apiKeyFromEnv returns the captured BRON_API_KEY value (if any). Internal
+// helper used by Resolve.
+func apiKeyFromEnv() string {
+	return capturedAPIKey
+}
+
 // Resolve returns the profile to use, applying env overrides on top of YAML.
 // Precedence (highest first): explicit name → BRON_PROFILE → ActiveProfile → "default".
 // Env vars BRON_WORKSPACE_ID, BRON_BASE_URL, BRON_API_KEY, BRON_API_KEY_FILE,
@@ -122,13 +150,8 @@ func (c *Config) Resolve(name string) (*Profile, error) {
 	if v := os.Getenv("BRON_BASE_URL"); v != "" {
 		p.BaseURL = v
 	}
-	if v := os.Getenv("BRON_API_KEY"); v != "" {
+	if v := apiKeyFromEnv(); v != "" {
 		p.APIKey = v
-		// Strip from the env so child processes (e.g. `bron completion install`,
-		// `op run -- bron …` shells, debugger spawns) don't inherit the JWK.
-		// `op run` re-injects it for each run, so subsequent invocations still
-		// work; for the lifetime of *this* process we already captured the value.
-		_ = os.Unsetenv("BRON_API_KEY")
 	}
 	if v := os.Getenv("BRON_API_KEY_FILE"); v != "" {
 		p.KeyFile = v

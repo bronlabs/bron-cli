@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	_ "embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,6 +27,22 @@ import (
 	"github.com/bronlabs/bron-cli/internal/output"
 	"github.com/bronlabs/bron-cli/internal/qparam"
 )
+
+//go:embed assets/icon.svg
+var bronIconSVG []byte
+
+// bronServerIcons returns the icon set advertised in the MCP `initialize`
+// response (`serverInfo.icons`). We embed the SVG at compile time and serve it
+// as a data URI so the icon survives air-gapped runs and never depends on a
+// network round-trip from the MCP client. SVG covers any size the client
+// renders ("any" sizes hint).
+func bronServerIcons() []mcp.Icon {
+	return []mcp.Icon{{
+		Source:   "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString(bronIconSVG),
+		MIMEType: "image/svg+xml",
+		Sizes:    []string{"any"},
+	}}
+}
 
 // newMCPCmd builds `bron mcp` — a stdio MCP (Model Context Protocol) server
 // that exposes typed Bron API tools to AI coding agents.
@@ -99,8 +117,11 @@ runs, audit pipelines, untrusted prompt sources).`,
 			}
 
 			server := mcp.NewServer(&mcp.Implementation{
-				Name:    "bron",
-				Version: Version,
+				Name:       "bron",
+				Title:      "Bron",
+				Version:    Version,
+				WebsiteURL: "https://developer.bron.org/sdk/cli",
+				Icons:      bronServerIcons(),
 			}, &mcp.ServerOptions{
 				Instructions: bronServerInstructions,
 			})
@@ -115,6 +136,7 @@ runs, audit pipelines, untrusted prompt sources).`,
 	}
 	cmd.Flags().BoolVar(&readOnly, "read-only", false,
 		"register only read-safe tools: GET endpoints plus tx dry-run. State-changing tools (withdraw, approve, decline, cancel, address-book create/delete, …) are skipped.")
+	cmd.AddCommand(newMCPInstallCmd())
 	return cmd
 }
 
@@ -194,11 +216,36 @@ var untrustedKeys = map[string]bool{
 	"reason":      true,
 }
 
+// untrustedKeysOnAddressBookRecord adds extra fields that are user-supplied
+// on address-book records specifically. We can't add `name` to the global
+// untrustedKeys set without flooding asset/network/account names (which are
+// high-trust within the workspace), but the address-book name is the
+// canonical free-form-text-from-untrusted-counterparty channel — an attacker
+// who tricks an operator into saving "Alice (vendor)" with a recordId can
+// then stuff `name` with prompt-injection content that the agent reads when
+// resolving recipients.
+//
+// Detected by structural shape: a map that has both `recordId` and `address`
+// keys is treated as an address-book record (matches AddressBookRecord DTO).
+var untrustedKeysOnAddressBookRecord = map[string]bool{
+	"name": true,
+}
+
+func isAddressBookRecord(m map[string]interface{}) bool {
+	_, hasID := m["recordId"]
+	_, hasAddr := m["address"]
+	return hasID && hasAddr
+}
+
 func walkAndWrap(v any) {
 	switch x := v.(type) {
 	case map[string]interface{}:
+		extra := map[string]bool(nil)
+		if isAddressBookRecord(x) {
+			extra = untrustedKeysOnAddressBookRecord
+		}
 		for k, val := range x {
-			if s, ok := val.(string); ok && untrustedKeys[k] && s != "" && !strings.HasPrefix(s, "<untrusted ") {
+			if s, ok := val.(string); ok && (untrustedKeys[k] || extra[k]) && s != "" && !strings.HasPrefix(s, "<untrusted ") {
 				x[k] = fmt.Sprintf("<untrusted source=%q>%s</untrusted>", k, s)
 				continue
 			}
@@ -260,16 +307,25 @@ func registerSpecDrivenTools(server *mcp.Server, cli *client.Client, opts mcpOpt
 }
 
 // isReadOnlyEndpoint flags endpoints that are safe to expose under
-// `bron mcp --read-only`. The base rule is "GET-only", with one explicit
-// allow-list entry for `tx.dry-run` — it's a `POST` per spec but pure
-// validation (the wrap-around for the `methodLabelOverrides` case in
-// `endpointDescription`).
+// `bron mcp --read-only`. The source of truth is the OpenAPI spec's
+// per-endpoint API-key permissions list (mined into `e.Permissions` by
+// cligen): a tool is read-only iff its permissions include "View only".
+// This avoids the "GET that mutates" footgun where a future endpoint like
+// `GET /transactions/{id}/retry-broadcast` would slip through a method-only
+// heuristic, and inverts the safety polarity to fail-closed (no permissions
+// metadata → not read-only).
+//
+// One explicit allow-list entry: `tx.dry-run` is a POST per spec but pure
+// validation (no DB writes, no audit-log entries, no rate-counter advance —
+// confirmed against backend). It's the only POST surfaced in read-only mode.
 func isReadOnlyEndpoint(resource, verb string, e generated.HelpEntry) bool {
-	if e.Method == "GET" {
-		return true
-	}
 	if resource == "tx" && verb == "dry-run" {
 		return true
+	}
+	for _, p := range e.Permissions {
+		if p == "View only" {
+			return true
+		}
 	}
 	return false
 }
@@ -306,7 +362,7 @@ func registerEndpoint(server *mcp.Server, cli *client.Client, resource, verb str
 				}
 			}
 		}
-		return nil, wrapUntrustedFields(result), nil
+		return nil, wrapUntrustedFields(output.HumanizeDates(result)), nil
 	})
 }
 
@@ -349,7 +405,7 @@ func registerTxShortcut(server *mcp.Server, cli *client.Client, name string, sc 
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
-		return nil, wrapUntrustedFields(result), nil
+		return nil, wrapUntrustedFields(output.HumanizeDates(result)), nil
 	})
 }
 
@@ -693,25 +749,27 @@ func queryParamValue(v any) string {
 }
 
 // errorResult wraps a Bron API error (or any error) into an MCP tool-error
-// payload — the structured envelope (code, status, trace, message) survives
-// for the agent to branch on without parsing strings. All string fields go
-// through `output.SanitizeForTerminal` because backend error messages can
-// echo user-controlled input (e.g. "external id 'foo<script>' already
-// taken") which a naive renderer might interpret.
+// payload — the structured envelope (status, code, message, requestId)
+// survives for the agent to branch on without parsing strings. Field names
+// mirror the SDK (`APIError.Status/Code/Message/RequestID`) so logs join
+// cleanly across surfaces (CLI stderr, MCP isError, SDK throws). All string
+// fields go through `output.SanitizeForTerminal` because backend error
+// messages can echo user-controlled input (e.g. "external id 'foo<script>'
+// already taken") which a naive renderer might interpret.
 func errorResult(err error) *mcp.CallToolResult {
 	payload := map[string]any{}
 	var apiErr *sdkhttp.APIError
 	if errors.As(err, &apiErr) {
-		payload["error"] = output.SanitizeForTerminal(apiErr.Message)
 		payload["status"] = apiErr.Status
 		if apiErr.Code != "" {
 			payload["code"] = output.SanitizeForTerminal(apiErr.Code)
 		}
+		payload["message"] = output.SanitizeForTerminal(apiErr.Message)
 		if apiErr.RequestID != "" {
-			payload["trace"] = output.SanitizeForTerminal(apiErr.RequestID)
+			payload["requestId"] = output.SanitizeForTerminal(apiErr.RequestID)
 		}
 	} else {
-		payload["error"] = output.SanitizeForTerminal(err.Error())
+		payload["message"] = output.SanitizeForTerminal(err.Error())
 	}
 	b, _ := json.Marshal(payload)
 	return &mcp.CallToolResult{

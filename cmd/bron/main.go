@@ -30,7 +30,6 @@ type globalFlags struct {
 	keyFile   string
 	proxy     string
 	output    string
-	query     string
 	columns   string
 	cellMax   int
 	embed     string
@@ -44,15 +43,15 @@ Resources follow the URL: bron <resource> <verb>. The <workspaceId> is implicit 
 
 const rootExample = `  bron help
   bron help <resource> <verb> [--output yaml]
-  bron help <topic>                   # signing | profiles | output | body | errors | idempotency | agents | mcp
+  bron help <topic>                   # addresses | agents | body | errors | idempotency | mcp | output | profiles | signing
   bron help --schema                  # full CLI schema (every command + types) as one JSON
 
-  bron auth keygen --file ~/.config/bron/keys/me.jwk
-
-  bron config
-  bron config init --workspace <workspaceId> --key-file ~/.config/bron/keys/me.jwk
+  bron config show
+  bron config list
+  bron config init --key-file ~/.config/bron/keys/me.jwk                                              # interactive: gen keypair, paste public JWK in UI, auto-resolve workspaceId via GET /workspaces
+  bron config init --name staging --workspace <workspaceId> --key-file ~/.config/bron/keys/staging.jwk   # explicit (CI / scripts)
   bron config use-profile production
-  bron config set workspace=<workspaceId> key_file=~/.config/bron/keys/me.jwk
+  bron config set workspace=<workspaceId> keyFile=~/.config/bron/keys/me.jwk
 
   bron accounts list --accountTypes vault --statuses active --limit 50
   bron accounts get <accountId>
@@ -120,9 +119,8 @@ const rootExample = `  bron help
 
   bron tx list --output yaml
   bron tx list --output table --columns transactionId,status,transactionType,createdAt
-  bron tx list --output table --query '.transactions[*]'
   bron tx list --output table --cell-max 0           # disable column truncation; full IDs/addresses
-  bron tx get <transactionId> --query '.status'
+  bron tx list --output jsonl | jq '.[] | select(.status=="signed")'    # heavier transformations: pipe to jq
 
   bron deposit-addresses list --accountId <accountId> --networkId ETH
 
@@ -157,6 +155,12 @@ const rootExample = `  bron help
   bron completion install              # auto-detects $SHELL (zsh|bash|fish)`
 
 func main() {
+	// Capture BRON_API_KEY before anything else: this strips it from the
+	// process env so any subprocess we may spawn later (completion install,
+	// op-run wrappers, debugger spawns) cannot inherit the JWK. Idempotent —
+	// must run before cobra dispatch.
+	config.CaptureAPIKeyFromEnv()
+
 	gf := &globalFlags{}
 
 	dateKeys := collectDateKeysFromSpec()
@@ -208,8 +212,7 @@ func main() {
 	root.PersistentFlags().StringVar(&gf.keyFile, "key-file", "", "path to JWK private key (overrides profile)")
 	root.PersistentFlags().StringVar(&gf.proxy, "proxy", "", "HTTP/HTTPS proxy URL (overrides profile)")
 	root.PersistentFlags().StringVar(&gf.output, "output", "", "output format: table|json|yaml|jsonl (default json)")
-	root.PersistentFlags().StringVar(&gf.query, "query", "", "JSONPath subset filter, e.g. .transactions[*].transactionId")
-	root.PersistentFlags().StringVar(&gf.columns, "columns", "", "comma-separated keys to keep, e.g. transactionId,status,createdAt (works for json/yaml/jsonl/table)")
+	root.PersistentFlags().StringVar(&gf.columns, "columns", "", "comma-separated keys to keep, e.g. transactionId,status,createdAt (works for json/yaml/jsonl/table). For heavier transformations pipe to jq.")
 	root.PersistentFlags().IntVar(&gf.cellMax, "cell-max", 28, "max chars per table cell; 0 disables truncation")
 	root.PersistentFlags().StringVar(&gf.embed, "embed", "", "comma list of related entities to embed in the response (e.g. events,settings,permission-groups). Each token routes to the matching backend includeXxx flag if the endpoint exposes one")
 	root.PersistentFlags().BoolVar(&gf.schema, "schema", false, "print JSON schema (request + response) for the command instead of running it")
@@ -217,7 +220,6 @@ func main() {
 
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		output.SetFormat(gf.output)
-		output.SetQuery(gf.query)
 		output.SetColumns(gf.columns)
 		output.SetCellMax(gf.cellMax)
 		applyEmbed(cmd, gf.embed)
@@ -296,10 +298,6 @@ func main() {
 		}
 	}
 
-	authCmd := newAuthCmd()
-	authCmd.GroupID = "system"
-	root.AddCommand(authCmd)
-
 	configCmd := newConfigCmd()
 	configCmd.GroupID = "system"
 	root.AddCommand(configCmd)
@@ -321,15 +319,14 @@ func main() {
 			return
 		}
 		var apiErr *sdkhttp.APIError
-		if errors.As(err, &apiErr) {
+		if errors.As(err, &apiErr) && (apiErr.Status != 0 || apiErr.Message != "") {
 			fmt.Fprintf(os.Stderr, "error: %s\n", output.SanitizeForTerminal(apiErr.Message))
-			fmt.Fprintf(os.Stderr, "  status:   %d\n", apiErr.Status)
+			fmt.Fprintf(os.Stderr, "  status: %d\n", apiErr.Status)
 			if apiErr.Code != "" {
-				fmt.Fprintf(os.Stderr, "  code:     %s\n", output.SanitizeForTerminal(apiErr.Code))
+				fmt.Fprintf(os.Stderr, "  code:   %s\n", output.SanitizeForTerminal(apiErr.Code))
 			}
 			if apiErr.RequestID != "" {
-				fmt.Fprintf(os.Stderr, "  trace:    %s\n", output.SanitizeForTerminal(apiErr.RequestID))
-				fmt.Fprintln(os.Stderr, "  (paste the trace ID into a support ticket — the backend logs it as Error ID)")
+				fmt.Fprintf(os.Stderr, "  id:     %s\n", output.SanitizeForTerminal(apiErr.RequestID))
 			}
 			os.Exit(exitCodeForStatus(apiErr.Status))
 		}

@@ -27,14 +27,14 @@ import (
 // signal handling, JSON-line output.
 func newTxSubscribeCmd(gf *globalFlags) *cobra.Command {
 	var (
-		accountID string
-		statuses  string
-		txTypes   string
-		noHistory bool
+		accountID   string
+		statuses    string
+		txTypes     string
+		withHistory bool
 	)
 	cmd := &cobra.Command{
 		Use:   "subscribe",
-		Short: "Stream transaction updates over WebSocket",
+		Short: "Stream transaction updates over WebSocket (live-only by default)",
 		Long: `Stream transaction updates from the Bron public API over a WebSocket.
 
 The CLI connects to wss://<api-host>/ws and prints each pushed transaction as
@@ -44,16 +44,17 @@ Output is always JSONL — the global --output flag is ignored for this command
 (table/yaml don't make sense on an open-ended stream). Pipe to jq for any
 reshaping you'd normally do with --output / --columns.
 
-On connect the server replays existing matching transactions first (same
-filters as the regular list endpoint), then keeps the connection open and
-streams live updates. Both phases honor --accountId / --transactionStatuses /
---transactionTypes. Pass --no-history to skip the initial replay and only
-receive live updates (recommended for long-running watchers).
+By default the CLI subscribes to live updates only, with no replay of existing
+matching transactions on connect. This is the right default for long-running
+watchers ("show me as transactions move into signing-required"). Pass
+--with-history to also replay every currently-matching transaction on connect
+before the live stream begins (useful for scripts that need a full snapshot
+plus live tail in one command).
 
 Filter flags mirror the list endpoint: --accountId, --transactionStatuses,
 --transactionTypes.`,
 		Example: `  bron tx subscribe
-  bron tx subscribe --no-history
+  bron tx subscribe --with-history
   bron tx subscribe --transactionStatuses signing-required,waiting-approval
   bron tx subscribe --accountId <accountId> --transactionTypes withdrawal,bridge
   bron tx subscribe | jq 'select(.status=="signed") | .transactionId'`,
@@ -105,7 +106,7 @@ Filter flags mirror the list endpoint: --accountId, --transactionStatuses,
 				Proxy:       profile.Proxy,
 			}, sdkOpts...)
 
-			filter := buildTxFilter(accountID, statuses, txTypes, noHistory)
+			filter := buildTxFilter(accountID, statuses, txTypes, withHistory)
 
 			ctx, cancel := signal.NotifyContext(c.Context(), os.Interrupt, syscall.SIGTERM)
 			defer cancel()
@@ -133,7 +134,7 @@ Filter flags mirror the list endpoint: --accountId, --transactionStatuses,
 	cmd.Flags().StringVar(&accountID, "accountId", "", "filter by account ID")
 	cmd.Flags().StringVar(&statuses, "transactionStatuses", "", "comma-separated status filter (e.g. signing-required,waiting-approval)")
 	cmd.Flags().StringVar(&txTypes, "transactionTypes", "", "comma-separated transactionType filter (e.g. withdrawal,bridge)")
-	cmd.Flags().BoolVar(&noHistory, "no-history", false, "skip initial replay of existing transactions; only stream live updates")
+	cmd.Flags().BoolVar(&withHistory, "with-history", false, "also replay every currently-matching transaction on connect, before the live stream begins (off by default — most watchers want live-only)")
 	return cmd
 }
 
@@ -141,7 +142,12 @@ Filter flags mirror the list endpoint: --accountId, --transactionStatuses,
 // typed TransactionsQuery) lets us send `limit` as a JSON number — backend's
 // Long limit field doesn't coerce "0" → 0L over WS. Strings/arrays for the
 // other filters work the same in both shapes.
-func buildTxFilter(accountID, statuses, txTypes string, noHistory bool) map[string]interface{} {
+//
+// `limit: 0` tells the backend to skip the snapshot replay and only stream
+// live updates — that's the default for `bron tx subscribe`. The user opts
+// into replay with --with-history, which omits the limit and lets the
+// backend send everything matching the filter on connect.
+func buildTxFilter(accountID, statuses, txTypes string, withHistory bool) map[string]interface{} {
 	filter := map[string]interface{}{}
 	if accountID != "" {
 		filter["accountId"] = accountID
@@ -152,7 +158,7 @@ func buildTxFilter(accountID, statuses, txTypes string, noHistory bool) map[stri
 	if txTypes != "" {
 		filter["transactionTypes"] = splitCSV(txTypes)
 	}
-	if noHistory {
+	if !withHistory {
 		filter["limit"] = 0
 	}
 	return filter

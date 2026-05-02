@@ -260,6 +260,7 @@ type rawSpec struct {
 
 type rawOp struct {
 	Summary     string                 `json:"summary"`
+	Description string                 `json:"description"`
 	Tags        []string               `json:"tags"`
 	Parameters  []rawParam             `json:"parameters"`
 	RequestBody *rawReqBody            `json:"requestBody"`
@@ -312,8 +313,9 @@ type plannedCmd struct {
 	QueryParams []param
 	BodyFields  []bodyField // leaves of the request body schema (skips oneOf)
 	HasBody     bool
-	BodyRef     string // component name of request body schema (e.g. "CreateTransaction")
-	ResponseRef string // component name of 200/201 response schema (e.g. "Transactions")
+	BodyRef     string   // component name of request body schema (e.g. "CreateTransaction")
+	ResponseRef string   // component name of 200/201 response schema (e.g. "Transactions")
+	Permissions []string // API key permissions allowed for this endpoint, e.g. ["View only", "Transaction Operator"]
 }
 
 // embedTokens picks the includeXxx query params and converts them to the
@@ -330,6 +332,32 @@ func (c plannedCmd) embedTokens() []string {
 		out = append(out, tok)
 	}
 	sort.Strings(out)
+	return out
+}
+
+// parsePermissions extracts the API-key permission set from the operation
+// description. The OpenAPI generator macro on the backend appends a line
+// like `<sup>API Key permissions: View only, Transaction Operator, Full Access</sup>`
+// to the description; we mine that line so the MCP server can use it as
+// the source of truth for `--read-only` filtering (a tool ships in read-only
+// mode iff its permission set is exactly {"View only"}).
+//
+// Returns nil if the description doesn't carry the marker — for endpoints
+// without explicit permissions we treat them as state-changing (fail-safe).
+var permissionsRe = regexp.MustCompile(`(?i)API Key permissions:\s*([^<\n]+)`)
+
+func parsePermissions(description string) []string {
+	m := permissionsRe.FindStringSubmatch(description)
+	if len(m) < 2 {
+		return nil
+	}
+	out := make([]string, 0, 4)
+	for _, p := range strings.Split(m[1], ",") {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
 	return out
 }
 
@@ -392,6 +420,7 @@ func buildPlan(spec rawSpec) ([]plannedCmd, error) {
 			method := strings.ToUpper(key)
 			cmd := derive(method, route)
 			cmd.Summary = strings.TrimSpace(op.Summary)
+			cmd.Permissions = parsePermissions(op.Description)
 			for _, p := range op.Parameters {
 				if p.In == "query" {
 					qp := param{Name: p.Name, Required: p.Required, Description: strings.TrimSpace(p.Description)}
@@ -910,6 +939,29 @@ func emitCommand(b *bytes.Buffer, c plannedCmd, provideVar string) {
 
 	// Query.
 	if len(c.QueryParams) > 0 {
+		// Validate enum-typed query params on the CLI side before hitting the
+		// wire. The backend silently ignores unknown enum values on list
+		// endpoints (returns an empty page), which is unhelpful for humans
+		// and agents alike — fail fast with the allowed list.
+		for _, q := range c.QueryParams {
+			if len(q.Enum) == 0 {
+				continue
+			}
+			// Treat both `string[]` (resolved item type) and bare `array` (item
+			// is an unresolved $ref to an enum schema) as repeating params.
+			repeat := strings.HasSuffix(q.Type, "[]") || q.Type == "array"
+			fmt.Fprintf(b, "\t\t\t\t\tif err := qparam.ValidateEnum(%q, q_%s, []string{",
+				q.Name, goSafeIdent(q.Name))
+			for i, v := range q.Enum {
+				if i > 0 {
+					fmt.Fprint(b, ", ")
+				}
+				fmt.Fprintf(b, "%q", v)
+			}
+			fmt.Fprintf(b, "}, %t); err != nil {\n", repeat)
+			fmt.Fprintln(b, "\t\t\t\t\t\treturn err")
+			fmt.Fprintln(b, "\t\t\t\t\t}")
+		}
 		fmt.Fprintln(b, "\t\t\t\t\tquery, err := compactQuery(map[string]interface{}{")
 		for _, q := range c.QueryParams {
 			fmt.Fprintf(b, "\t\t\t\t\t\t%q: q_%s,\n", q.Name, goSafeIdent(q.Name))
@@ -1081,6 +1133,7 @@ func emitHelpDoc(plan []plannedCmd, shortcuts []txShortcut) ([]byte, error) {
 	fmt.Fprintln(&b, "\tQueryParams  []HelpQueryParam")
 	fmt.Fprintln(&b, "\tPathArgs     []string")
 	fmt.Fprintln(&b, "\tEmbedTokens  []string // valid --embed values, derived from includeXxx query params")
+	fmt.Fprintln(&b, "\tPermissions  []string // API key permissions allowed, e.g. [\"View only\", \"Transaction Operator\"] — used by `bron mcp --read-only`")
 	fmt.Fprintln(&b, "}")
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "type HelpQueryParam struct {")
@@ -1152,6 +1205,16 @@ func emitHelpDoc(plan []plannedCmd, shortcuts []txShortcut) ([]byte, error) {
 						fmt.Fprint(&b, ", ")
 					}
 					fmt.Fprintf(&b, "%q", t)
+				}
+				fmt.Fprint(&b, "}")
+			}
+			if len(c.Permissions) > 0 {
+				fmt.Fprint(&b, ", Permissions: []string{")
+				for i, p := range c.Permissions {
+					if i > 0 {
+						fmt.Fprint(&b, ", ")
+					}
+					fmt.Fprintf(&b, "%q", p)
 				}
 				fmt.Fprint(&b, "}")
 			}

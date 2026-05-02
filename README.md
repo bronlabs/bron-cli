@@ -41,22 +41,31 @@ go install github.com/bronlabs/bron-cli/cmd/bron@latest
 
 ## Authentication
 
-The CLI talks to the Bron API with a per-key JWT signature. You generate a P-256 keypair locally, register the **public** half with Bron (UI → API keys), and keep the **private** half on disk in a `0600` file (the CLI refuses to load anything more permissive).
+The CLI talks to the Bron API with a per-key JWT signature. You generate a P-256 keypair locally, register the **public** half with Bron (Settings → API keys), and keep the **private** half on disk in a `0600` file (the CLI refuses to load anything more permissive).
 
 ```bash
-# 1. generate a keypair (private goes to a file, public is printed to stdout)
-bron auth keygen --file ~/.config/bron/keys/me.jwk
+# 1. one shot: generate the keypair, print the public JWK, save the profile
+bron config init --key-file ~/.config/bron/keys/me.jwk
 
-# 2. paste the printed public JWK into the Bron UI to authorize this key (Bron returns nothing — the binding is by `kid`)
-open https://app.bron.org/settings/api-keys # Settings -> API keys
+# 2. The CLI prints the public JWK and waits. Paste the JWK into the Bron UI:
+open https://app.bron.org/settings/api-keys     # Settings → API keys → ✓ "Input public key (JWK)"
 
-# 3. wire it into a profile
-bron config init --name default --workspace <workspaceId> --key-file ~/.config/bron/keys/me.jwk
+# 3. Press Enter in the CLI. It calls GET /workspaces with your fresh key,
+#    auto-discovers the workspace ID, validates the registration in one step,
+#    and writes the profile to ~/.config/bron/config.yaml.
 
-# 4. sanity-check
-bron config
+# 4. Sanity-check.
+bron config show
 bron workspace info
 ```
+
+If you already know the workspace ID (CI / scripts / the impatient), pass it explicitly and the CLI skips the auto-discovery step:
+
+```bash
+bron config init --name default --workspace <workspaceId> --key-file ~/.config/bron/keys/me.jwk
+```
+
+In **non-interactive runs (no TTY)** `--workspace` is required — the auto-discovery prompt has no scripted equivalent. Failing fast beats silently saving an unverified profile.
 
 You can have multiple profiles (`--name staging` etc.) and switch with `bron config use-profile <name>`. Per-call overrides via `--profile`, `--workspace`, `--key-file`, `--proxy` or env vars (`BRON_PROFILE`, `BRON_WORKSPACE_ID`, `BRON_API_KEY` / `BRON_API_KEY_FILE`, `BRON_PROXY`). `BRON_API_KEY` carries the raw JWK bytes, intended for secret-store wrappers (`op run`, `vault`, …) that pipe the value at startup so it never lives on disk.
 
@@ -76,15 +85,22 @@ Resources follow the URL: bron <resource> <verb>. The <workspaceId> is implicit 
 Examples:
   bron help
   bron help <resource> <verb> [--output yaml]
-  bron help <topic>                   # signing | profiles | output | body | errors | idempotency | agents
+  bron help <topic>                   # addresses | agents | body | errors | idempotency | mcp | output | profiles | signing
   bron help --schema                  # full CLI schema (every command + types) as one JSON
 
-  bron auth keygen --file ~/.config/bron/keys/me.jwk
-
-  bron config
-  bron config init --workspace <workspaceId> --key-file ~/.config/bron/keys/me.jwk
+  bron config show
+  bron config list
+  bron config init --key-file ~/.config/bron/keys/me.jwk                             # interactive: gen keypair, print public JWK, auto-resolve workspaceId via GET /workspaces
+  bron config init --name staging --workspace <workspaceId> --key-file ~/.config/bron/keys/staging.jwk   # explicit (CI / scripts)
   bron config use-profile production
-  bron config set workspace=<workspaceId> key_file=~/.config/bron/keys/me.jwk
+  bron config set workspace=<workspaceId> keyFile=~/.config/bron/keys/me.jwk
+
+  bron mcp                              # stdio MCP server, foreground
+  bron mcp --read-only                  # GET endpoints + tx dry-run only — no withdrawals/approvals
+  bron mcp install --target claude-desktop      # register `bron mcp` in Claude Desktop's mcp.json
+  bron mcp install --target cursor              # ~/.cursor/mcp.json
+  bron mcp install --target cline               # Cline (VS Code) globalStorage
+  bron mcp install --target claude-code         # delegates to `claude mcp add`
 
   bron accounts list --accountTypes vault --limit 50
   bron accounts get <accountId>
@@ -158,8 +174,7 @@ Examples:
 
   bron tx list --output yaml --includeEvents true
   bron tx list --output table --columns transactionId,status,transactionType,createdAt
-  bron tx list --output table --query '.transactions[*]'
-  bron tx get <transactionId> --query '.status'
+  bron tx list --output jsonl | jq '.[] | select(.status=="signed")'    # heavier transformations: pipe to jq
 
   bron deposit-addresses list --accountId <accountId> --networkId ETH
 
@@ -202,7 +217,6 @@ Flags:
       --output string      output format: table|json|yaml|jsonl (default json)
       --profile string     config profile name
       --proxy string       HTTP/HTTPS proxy URL (overrides profile)
-      --query string       JSONPath subset filter, e.g. .transactions[*].transactionId
       --schema             print JSON schema (request + response) for the command instead of running it
   -v, --version            version for bron
       --workspace string   workspace id (overrides profile)
@@ -215,14 +229,15 @@ Use "bron <resource> <verb> --help" for any command's flags.
 ```
 BRON_PROFILE=staging                                 bron tx list
 BRON_WORKSPACE_ID=<workspaceId>                      bron tx list
-BRON_API_KEY_FILE=~/.config/bron/keys/other.jwk      bron tx list
 BRON_API_KEY="$(op read 'op://Personal/Bron/jwk')"   bron tx list   # raw JWK bytes; never lands on disk
+BRON_API_KEY_FILE=~/.config/bron/keys/other.jwk      bron tx list
+BRON_BASE_URL=https://api-staging.bron.org           bron tx list
 BRON_PROXY=http://user:pass@proxy:8080               bron tx list
 HTTPS_PROXY=http://proxy:8080                        bron tx list   # standard env vars are honored too
 BRON_CONFIG=/tmp/cli.yaml                            bron config show
 ```
 
-`BRON_API_KEY` (raw JWK bytes) wins over `BRON_API_KEY_FILE` and `key_file:` when both are set — pair it with a secret store (1Password, Vault, sops) so the private JWK never lives on disk. The CLI strips the var from its environment after reading, so child processes don't inherit it.
+`BRON_API_KEY` (raw JWK bytes) wins over `BRON_API_KEY_FILE` and the YAML's `key_file:` field when both are set — pair it with a secret store (1Password, Vault, sops) so the private JWK never lives on disk. The CLI strips the var from its environment after reading, so child processes don't inherit it.
 
 ---
 
@@ -247,6 +262,20 @@ Special case — `bron tx <type>` (e.g. `bron tx withdrawal`, `bron tx allowance
 
 Auth follows the same precedence as the rest of the CLI: active profile, then env (`BRON_PROFILE`, `BRON_API_KEY` / `BRON_API_KEY_FILE`, `BRON_WORKSPACE_ID`, `BRON_BASE_URL`, `BRON_PROXY`).
 
+The fastest way to wire it into a host: `bron mcp install --target <host>` edits the host's `mcp.json` (or runs `claude mcp add` for Claude Code). Idempotent, registers the absolute path of the running binary so future `brew upgrade` swaps stay live.
+
+```bash
+bron mcp install --target claude-desktop          # ~/Library/Application Support/Claude/claude_desktop_config.json
+bron mcp install --target cursor                  # ~/.cursor/mcp.json
+bron mcp install --target cline                   # Cline (VS Code) globalStorage
+bron mcp install --target claude-code             # shells out to `claude mcp add`
+bron mcp install --target cursor --read-only      # register with --read-only baked in
+bron mcp install --target cursor --name bron-qa   # multiple profiles in the same host
+bron mcp install --target claude-desktop --dry-run    # print planned change, don't write
+```
+
+If you'd rather hand-edit:
+
 ```bash
 # Claude Code
 claude mcp add bron -- bron mcp
@@ -265,6 +294,8 @@ claude mcp add bron --env BRON_API_KEY='op://Personal/Bron/private-jwk' -- op ru
 Pass `--read-only` to register only GET endpoints + `tx dry-run`. Use this for agents that should observe a workspace without being able to move funds (audit pipelines, untrusted prompt sources, CI runs):
 
 ```bash
+bron mcp install --target claude-code --read-only
+# or, hand-edited:
 claude mcp add bron-readonly -- bron mcp --read-only
 ```
 
@@ -276,17 +307,17 @@ Bron Desktop has its own built-in MCP server when installed — use that for ope
 
 ```bash
 # Live-only, no history (recommended for long-running watchers).
-bron tx subscribe --no-history
+bron tx subscribe
 
 # Filter the same way you would on `bron tx list`.
-bron tx subscribe --no-history --transactionStatuses signing-required,waiting-approval
+bron tx subscribe --transactionStatuses signing-required,waiting-approval
 bron tx subscribe --accountId <accountId> --transactionTypes withdrawal,bridge
 
 # Pipe to jq for any extra filtering / reshaping.
-bron tx subscribe --no-history | jq 'select(.status == "completed")'
+bron tx subscribe | jq 'select(.status == "completed")'
 ```
 
-Without `--no-history` the server replays everything matching the filters before going live — that can be a lot on a busy workspace. Pair with explicit filters or pass `--no-history` if you only care about new events.
+By default `bron tx subscribe` is live-only: no replay on connect, just the stream. Pass `--with-history` if you also want every currently-matching transaction replayed first — useful for "snapshot + tail" scripts, but can be a lot on a busy workspace.
 
 ## Output formats and queries
 
@@ -296,16 +327,14 @@ bron tx list --output yaml
 bron tx list --output jsonl
 bron tx list --output table    # nested objects collapse to {…}/[…N], *At fields render as ISO UTC
 
-# JSONPath subset filter (no jq, no select — just navigation)
-bron tx list      --query '.transactions[*].transactionId'
-bron tx get <id>  --query '.status'
-bron accounts list          --output table --query '.accounts[*]'
-
 # --columns picks fields (works for json / yaml / jsonl / table) in the listed order.
 # Supports dot-paths: table shows flat headers, json/yaml emit nested objects.
 bron tx list --output table --columns transactionId,transactionType,params.amount,params.assetId,createdAt
 bron tx list --output json  --columns transactionId,status,params.amount
 bron tx get <id>            --columns transactionId,status,params
+
+# Heavier transformations (filter / select / aggregate) — pipe to jq.
+bron tx list --output jsonl | jq '.[] | select(.status=="signed") | .transactionId'
 ```
 
 JSON output is colored when stdout is a TTY. Disable with `NO_COLOR=1`, force on with `FORCE_COLOR=1`.
@@ -349,9 +378,20 @@ bron tx withdrawal --file ./tx.json \
     --params.feeLevel=HIGH
 ```
 
-## Exit codes
+## Errors & exit codes
 
-Mapped from HTTP status:
+On any 4xx / 5xx the CLI prints a structured envelope to **stderr** and sets the exit code from the HTTP status:
+
+```
+error: Transaction `i2rvrwzgzj…` not found!
+  status: 404
+  code:   not-found
+  id:     d7d09dd2ee76…
+```
+
+- `code` is the stable error-code slug — branch on it in scripts; never on the human message.
+- `id` is the per-request correlation ID (header `Correlation-Id`). Quote it when reporting issues; SDKs expose the same value as `RequestID` / MCP error payload `requestId`.
+- Enum-typed query flags (`--statuses`, `--transactionTypes`, …) are validated client-side before the request hits the wire — bad values fail with `error: --<flag>: invalid value "<bad>" (allowed: …)`, exit 1.
 
 | Status | Exit | |
 |---|---|---|

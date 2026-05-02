@@ -31,14 +31,14 @@ func buildFullSchemaDoc() (map[string]interface{}, error) {
 		Usage    string   `json:"usage"`
 		Method   string   `json:"method"`
 		Path     string   `json:"path"`
-		PathArgs []string `json:"path_args,omitempty"`
+		PathArgs []string `json:"pathArgs,omitempty"`
 	}
 	type txDoc struct {
 		Type      string   `json:"type"`
 		Usage     string   `json:"usage"`
-		ParamsRef string   `json:"params_ref"`
+		ParamsRef string   `json:"paramsRef"`
 		Params    []string `json:"params"`
-		TopFields []string `json:"top_fields"`
+		TopFields []string `json:"topFields"`
 	}
 
 	resources := make([]string, 0, len(generated.HelpEntries))
@@ -88,9 +88,9 @@ func buildFullSchemaDoc() (map[string]interface{}, error) {
 	}
 
 	doc["x-bron-cli"] = map[string]interface{}{
-		"version":      Version,
-		"commands":     commands,
-		"tx_shortcuts": tx,
+		"version":     Version,
+		"commands":    commands,
+		"txShortcuts": tx,
 	}
 	return doc, nil
 }

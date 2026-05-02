@@ -62,6 +62,15 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					var pathParams map[string]string
 					var payload interface{}
+					if err := qparam.ValidateEnum("accountTypes", q_accountTypes, []string{"vault"}, true); err != nil {
+						return err
+					}
+					if err := qparam.ValidateEnum("excludedAccountTypes", q_excludedAccountTypes, []string{"vault"}, true); err != nil {
+						return err
+					}
+					if err := qparam.ValidateEnum("statuses", q_statuses, []string{"active", "archived", "shard-generating"}, true); err != nil {
+						return err
+					}
 					query, err := compactQuery(map[string]interface{}{
 						"accountTypes":         q_accountTypes,
 						"excludedAccountTypes": q_excludedAccountTypes,
@@ -122,6 +131,12 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					var pathParams map[string]string
 					var payload interface{}
+					if err := qparam.ValidateEnum("activityTypes", q_activityTypes, []string{"login", "new-device-login", "new-address-book-record", "update-address-book-record", "delete-address-book-record", "workspace-creation", "workspace-settings-approval-update", "workspace-name-change", "workspace-tag-change", "tag-relinked", "tag-auto-relinked", "tag-deactivated", "only-address-book-withdrawals-settings-update", "transaction-approval-settings-update", "workspace-members-approval-update", "address-book-settings-approval-update", "transaction-limits-approval-settings-update", "member-creation", "member-update", "service-member-creation", "transaction-limit-creation", "transaction-limit-update", "account-creation", "passkey-creation", "passkey-deletion", "2fa-change", "account-pins-reset", "shard-access-request-updated", "transaction-completed", "subscription-updated", "trial-prolongation-requested", "trial-prolongated", "ownership-takeover-request-created", "ownership-takeover-request-cancelled", "ownership-takeover-new-beneficiary-added", "ownership-takeover-beneficiary-left", "ownership-takeover-request-completed"}, true); err != nil {
+						return err
+					}
+					if err := qparam.ValidateEnum("excludedActivityTypes", q_excludedActivityTypes, []string{"login", "new-device-login", "new-address-book-record", "update-address-book-record", "delete-address-book-record", "workspace-creation", "workspace-settings-approval-update", "workspace-name-change", "workspace-tag-change", "tag-relinked", "tag-auto-relinked", "tag-deactivated", "only-address-book-withdrawals-settings-update", "transaction-approval-settings-update", "workspace-members-approval-update", "address-book-settings-approval-update", "transaction-limits-approval-settings-update", "member-creation", "member-update", "service-member-creation", "transaction-limit-creation", "transaction-limit-update", "account-creation", "passkey-creation", "passkey-deletion", "2fa-change", "account-pins-reset", "shard-access-request-updated", "transaction-completed", "subscription-updated", "trial-prolongation-requested", "trial-prolongated", "ownership-takeover-request-created", "ownership-takeover-request-cancelled", "ownership-takeover-new-beneficiary-added", "ownership-takeover-beneficiary-left", "ownership-takeover-request-completed"}, true); err != nil {
+						return err
+					}
 					query, err := compactQuery(map[string]interface{}{
 						"accountIds":            q_accountIds,
 						"offset":                q_offset,
@@ -296,6 +311,15 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					var pathParams map[string]string
 					var payload interface{}
+					if err := qparam.ValidateEnum("recordType", q_recordType, []string{"address", "tag", "bank"}, false); err != nil {
+						return err
+					}
+					if err := qparam.ValidateEnum("recordTypes", q_recordTypes, []string{"address", "tag", "bank"}, true); err != nil {
+						return err
+					}
+					if err := qparam.ValidateEnum("statuses", q_statuses, []string{"new", "active", "rejected", "deleted"}, true); err != nil {
+						return err
+					}
 					query, err := compactQuery(map[string]interface{}{
 						"recordIds":   q_recordIds,
 						"networkIds":  q_networkIds,
@@ -365,6 +389,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 						"assetId": args[0],
 					}
 					var payload interface{}
+					if err := qparam.ValidateEnum("assetType", q_assetType, []string{"blockchain", "exchange", "fiat", "nft"}, false); err != nil {
+						return err
+					}
 					query, err := compactQuery(map[string]interface{}{
 						"assetIds":        q_assetIds,
 						"networkIds":      q_networkIds,
@@ -417,6 +444,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					var pathParams map[string]string
 					var payload interface{}
+					if err := qparam.ValidateEnum("assetType", q_assetType, []string{"blockchain", "exchange", "fiat", "nft"}, false); err != nil {
+						return err
+					}
 					query, err := compactQuery(map[string]interface{}{
 						"assetIds":        q_assetIds,
 						"networkIds":      q_networkIds,
@@ -538,6 +568,12 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					var pathParams map[string]string
 					var payload interface{}
+					if err := qparam.ValidateEnum("accountTypes", q_accountTypes, []string{"vault"}, true); err != nil {
+						return err
+					}
+					if err := qparam.ValidateEnum("excludedAccountTypes", q_excludedAccountTypes, []string{"vault"}, true); err != nil {
+						return err
+					}
 					query, err := compactQuery(map[string]interface{}{
 						"accountId":            q_accountId,
 						"accountIds":           q_accountIds,
@@ -613,6 +649,15 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					var pathParams map[string]string
 					var payload interface{}
+					if err := qparam.ValidateEnum("accountTypes", q_accountTypes, []string{"vault"}, true); err != nil {
+						return err
+					}
+					if err := qparam.ValidateEnum("statuses", q_statuses, []string{"new", "pending", "address-activation-required", "address-creation-required", "approval-pending", "enabled", "disabled", "error", "account-archived"}, true); err != nil {
+						return err
+					}
+					if err := qparam.ValidateEnum("sortDirection", q_sortDirection, []string{"ASC", "DESC"}, false); err != nil {
+						return err
+					}
 					query, err := compactQuery(map[string]interface{}{
 						"accountId":     q_accountId,
 						"addressIds":    q_addressIds,
@@ -1065,6 +1110,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					var pathParams map[string]string
 					var payload interface{}
+					if err := qparam.ValidateEnum("statuses", q_statuses, []string{"new", "active", "deactivated", "declined"}, true); err != nil {
+						return err
+					}
 					query, err := compactQuery(map[string]interface{}{
 						"statuses":               q_statuses,
 						"fromAccountIds":         q_fromAccountIds,
@@ -1535,6 +1583,24 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					var pathParams map[string]string
 					var payload interface{}
+					if err := qparam.ValidateEnum("transactionTypes", q_transactionTypes, []string{"deposit", "withdrawal", "multi-withdrawal", "negative-deposit", "auto-withdrawal", "allowance", "defi", "defi-message", "address-activation", "address-creation", "stake-delegation", "stake-undelegation", "stake-claim", "stake-withdrawal", "stake-take-reward", "stake-earn-reward", "swap-lifi", "intents", "loyalty-lock", "loyalty-unlock", "loyalty-collect-rewards", "canton-reward", "nft-deposit", "nft-withdrawal", "nft-allowance", "fiat-out", "fiat-in", "bridge"}, true); err != nil {
+						return err
+					}
+					if err := qparam.ValidateEnum("accountTypes", q_accountTypes, []string{"vault"}, true); err != nil {
+						return err
+					}
+					if err := qparam.ValidateEnum("transactionStatuses", q_transactionStatuses, []string{"new", "waiting-confirmations", "waiting-approval", "approved", "awaiting-security-policy", "completed", "partially-completed", "canceled", "expired", "signing-required", "signing", "signed", "broadcasted", "manual-resolving", "failed-on-blockchain", "removed-from-blockchain", "error", "awaiting-deposit", "awaiting-conversion", "awaiting-payout", "awaiting-defi-execution", "acceptance-required"}, true); err != nil {
+						return err
+					}
+					if err := qparam.ValidateEnum("transactionStatusNotIn", q_transactionStatusNotIn, []string{"new", "waiting-confirmations", "waiting-approval", "approved", "awaiting-security-policy", "completed", "partially-completed", "canceled", "expired", "signing-required", "signing", "signed", "broadcasted", "manual-resolving", "failed-on-blockchain", "removed-from-blockchain", "error", "awaiting-deposit", "awaiting-conversion", "awaiting-payout", "awaiting-defi-execution", "acceptance-required"}, true); err != nil {
+						return err
+					}
+					if err := qparam.ValidateEnum("sortBy", q_sortBy, []string{"updated", "activity"}, false); err != nil {
+						return err
+					}
+					if err := qparam.ValidateEnum("sortDirection", q_sortDirection, []string{"ASC", "DESC"}, false); err != nil {
+						return err
+					}
 					query, err := compactQuery(map[string]interface{}{
 						"transactionIds":               q_transactionIds,
 						"transactionTypes":             q_transactionTypes,

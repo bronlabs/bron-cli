@@ -3,7 +3,7 @@ package main
 import "sort"
 
 // topics maps `bron help <topic>` queries to short conceptual blurbs.
-// Each blurb is one paragraph + a few bullet points + a docs.bron.org link.
+// Each blurb is one paragraph + a few bullet points + a developer.bron.org link.
 // Keep them short — agents want fast orientation, humans follow the link for depth.
 var topics = map[string]string{
 	"signing": `Signing — how the CLI authenticates to the Bron API
@@ -12,9 +12,18 @@ Every request carries a short-lived JWT signed with your ES256 (P-256) private k
 The signature covers the HTTP method, path, query, body hash, and a fresh timestamp,
 so it is bound to that exact call and cannot be replayed.
 
-  • Generate a keypair locally:           bron auth keygen --file ~/.config/bron/keys/me.jwk
+  • One-shot, interactive (recommended):  bron config init --key-file ~/.config/bron/keys/me.jwk
+                                          (CLI generates the JWK if --key-file points to a non-existent path,
+                                          writes the private half mode 0600, prints the public half to stdout,
+                                          waits for you to paste it into Bron Settings → API keys, then calls
+                                          GET /workspaces with the fresh key to auto-resolve workspaceId and
+                                          validate the registration in one round-trip.)
+  • Explicit (CI / scripts):              bron config init --name <profile> --workspace <wsId> --key-file …
+                                          (saves as-is, no auto-discovery — required when stdin is non-TTY.)
   • Register the public JWK in Bron UI    (the binding is by "kid" inside the JWK).
-  • Keep the private JWK on disk (0600);  point your profile at it via "key_file".
+  • Re-print the public JWK any time:     bron config init --name <profile> --key-file <path>   (re-derives + reprints
+                                          public half from the existing private JWK on disk, then walks the same
+                                          auto-discovery flow — pass --workspace to skip the /workspaces round-trip).
   • The CLI re-signs every request — no token caching, no revocation flow needed.
 
 Key sources, highest precedence first:
@@ -25,7 +34,7 @@ Key sources, highest precedence first:
   • $BRON_API_KEY_FILE   path override (for CI when you ship a managed file)
   • profile.key_file     ~/.config/bron/config.yaml — interactive default
 
-Reference: https://docs.bron.org/api/auth`,
+Reference: https://developer.bron.org/sdk/cli/auth`,
 
 	"profiles": `Profiles — config + env overrides
 
@@ -35,17 +44,18 @@ Multiple profiles let you switch between environments without retyping flags.
 
 Resolution order (highest precedence first):
   1. --profile / --workspace / --key-file / --proxy / --base-url flags
-  2. BRON_PROFILE / BRON_WORKSPACE_ID / BRON_API_KEY / BRON_API_KEY_FILE / BRON_PROXY / BRON_BASE_URL env vars
+  2. BRON_PROFILE / BRON_WORKSPACE_ID / BRON_API_KEY / BRON_API_KEY_FILE / BRON_BASE_URL / BRON_PROXY / BRON_CONFIG env vars
      (BRON_API_KEY carries raw JWK bytes and wins over BRON_API_KEY_FILE / key_file —
       pair with "op run" / Vault / sops so the key never lands on disk)
   3. active_profile from YAML
   4. profile named "default"
 
 Common workflow:
-  bron config init --name dev --workspace <wsId> --key-file ~/.config/bron/keys/me.jwk
+  bron config init --key-file ~/.config/bron/keys/me.jwk    # interactive: auto-resolves workspaceId
   bron config use-profile production
   bron config show              # what the HTTP client will see (env applied)
   bron config show --raw        # what is actually written in YAML
+  bron config list              # all profiles, with the active one annotated
 
 Behind a corporate proxy?
   bron config set proxy=http://user:pass@host:8080
@@ -54,7 +64,7 @@ Behind a corporate proxy?
 base_url defaults to https://api.bron.org and is hidden from help; override
 with --base-url per call, or BRON_BASE_URL=... in the environment.
 
-Reference: https://docs.bron.org/cli/profiles`,
+Reference: https://developer.bron.org/sdk/cli/auth`,
 
 	"output": `Output — formats, queries, columns
 
@@ -66,12 +76,6 @@ by a small JSONPath subset and/or a column list.
   --output jsonl              one JSON document per line (good for piping)
   --output table              aligned columns; nested objects collapse to {…} / […N], cells trimmed.
                               *At / *Time fields with epoch-millis values render as ISO UTC.
-
-  --query .path[*].field      JSONPath subset:
-      .foo.bar          object key (nested)
-      .foo[0]           array index
-      .foo[*]           map over every element
-      .foo[*].bar       map + pick a sub-key
 
   --columns id,status,...     comma-separated key list to keep, in the listed order.
                               Works for json / yaml / jsonl / table. For list-shape responses
@@ -91,7 +95,7 @@ Examples:
   bron tx list --output json  --columns transactionId,status,params.amount
   bron tx get <id>            --columns transactionId,status,params
 
-Reference: https://docs.bron.org/cli/output`,
+Reference: https://developer.bron.org/sdk/cli/output`,
 
 	"body": `Body composition — for write operations
 
@@ -109,12 +113,17 @@ Examples:
   bron tx withdrawal --json '{"accountId":"<accountId>","params":{"amount":100}}'
   cat tx.json | bron tx withdrawal --file -
 
-Reference: https://docs.bron.org/cli/body`,
+Reference: https://developer.bron.org/sdk/cli`,
 
 	"errors": `Errors — exit codes and error shape
 
-API errors are returned as APIError with a status, code, message, and request ID.
-The CLI prints them on stderr and maps the HTTP status to a stable exit code.
+API errors print a structured envelope on stderr. The HTTP status maps to a
+stable exit code:
+
+  error: <human-readable message>
+    status: <http-status>
+    code:   <STABLE_CODE>
+    id:     <correlation-id>
 
   401 / 403   → exit 3   (not authorized)
   404         → exit 4   (not found)
@@ -124,9 +133,16 @@ The CLI prints them on stderr and maps the HTTP status to a stable exit code.
   5xx         → exit 8   (server error)
   other       → exit 1
 
-The request ID is logged in API logs; quote it when reporting issues.
+Branch on "code" (stable slug) — never on the human message. Quote "id" when
+reporting issues; the SDKs expose the same value as APIError.RequestID, and
+the MCP error payload as "requestId".
 
-Reference: https://docs.bron.org/api/errors`,
+Enum-typed query flags (--statuses, --transactionTypes, …) are validated
+client-side before the request hits the wire. Invalid values fail with
+"error: --<flag>: invalid value \"<bad>\" (allowed: …)" and exit 1, no API
+call is made.
+
+Reference: https://developer.bron.org/sdk/cli/errors`,
 
 	"idempotency": `Idempotency — externalId for safe retries
 
@@ -142,7 +158,7 @@ instead of creating a new one.
 
 Without externalId, retries can double-spend. Always set it for write operations.
 
-Reference: https://docs.bron.org/api/idempotency`,
+Reference: https://developer.bron.org/sdk/cli/cookbook`,
 
 	"addresses": `Addresses — picking a recipient on a withdrawal
 
@@ -174,7 +190,7 @@ Examples:
     --params.amount=5   --params.assetId=5000 --params.networkId=ETH \
     --params.toWorkspaceTag=<workspaceTag>
 
-Reference: https://docs.bron.org/api/withdrawals`,
+Reference: https://developer.bron.org/api-reference/transactions`,
 
 	"agents": `Agents — using bron from LLMs and scripts
 
@@ -195,7 +211,8 @@ Machine-friendly switches that work in both modes:
                                          type) as JSON. One call, no follow-ups.
   • bron help <resource> <verb>        — per-command JSON: usage + flags + body + response.
   • --output json | yaml | jsonl       — structured output for parsing.
-  • --query .path[*].field             — extract a single value without piping to jq.
+  • --columns dotted.path,…            — projection without piping to jq.
+  • Pipe to jq for transformations     — bron tx list --output jsonl | jq ...
   • Stable exit codes                  — see "bron help errors".
   • Idempotent writes via externalId   — see "bron help idempotency".
 
@@ -210,7 +227,7 @@ For MCP mode, "tools/list" returns the same surface as --schema; the long-poll
 for single-tx waits. Pair with the bron-skills (https://github.com/bronlabs/bron-skills)
 package for vetted Claude/Cursor/etc. skill packs.
 
-Reference: https://docs.bron.org/cli/agents`,
+Reference: https://developer.bron.org/sdk/cli/agents`,
 
 	"mcp": `MCP — Model Context Protocol server
 
@@ -221,7 +238,16 @@ becomes a typed MCP tool the agent can call directly, no shell quoting.
   bron mcp                  # stdio server, foreground (run from your MCP host)
   bron mcp --read-only      # GET endpoints + tx dry-run only — no withdraws
 
-Wire it into your agent host:
+Wire it into your agent host (one command, no hand-editing JSON):
+
+  bron mcp install --target claude-desktop      # edits claude_desktop_config.json
+  bron mcp install --target cursor              # edits ~/.cursor/mcp.json
+  bron mcp install --target cline               # edits Cline's mcp_settings.json
+  bron mcp install --target claude-code         # delegates to "claude mcp add"
+  bron mcp install --target cursor --read-only  # register with --read-only baked in
+  bron mcp install --target cursor --dry-run    # print planned change, don't write
+
+Or hand-edit the host config:
 
   Claude Code:        claude mcp add bron -- bron mcp
   Claude Code + 1P:   claude mcp add bron --env BRON_API_KEY='op://Personal/Bron/private-jwk' \
@@ -260,7 +286,7 @@ Bron Desktop ships its own MCP server bundled — use that for operator-at-their
 desk workflows. Use "bron mcp" for headless / CI / API-key automations where
 Desktop isn't running.
 
-Reference: https://docs.bron.org/cli/mcp`,
+Reference: https://developer.bron.org/sdk/cli/mcp`,
 }
 
 // topicNames returns the sorted list of available topic names.

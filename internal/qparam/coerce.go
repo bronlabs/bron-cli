@@ -16,6 +16,7 @@ package qparam
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -129,6 +130,42 @@ func coerceMap(m map[string]interface{}) error {
 					}
 				}
 			}
+		}
+	}
+	return nil
+}
+
+// ValidateEnum rejects raw values that aren't members of allowed.
+//
+// `repeat` true means the flag accepts a comma-separated list (the OpenAPI
+// array shape, e.g. `--statuses signing-required,waiting-approval`); each
+// element is checked individually. False means a single scalar.
+//
+// Empty value is always valid — the flag is unset and the param won't be
+// sent. Unknown elements produce a single error with the offending value
+// and the full allowed list, so the user sees the fix in one read.
+func ValidateEnum(name, raw string, allowed []string, repeat bool) error {
+	if raw == "" {
+		return nil
+	}
+	values := []string{raw}
+	if repeat {
+		values = strings.Split(raw, ",")
+	}
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		ok := false
+		for _, a := range allowed {
+			if v == a {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return fmt.Errorf("--%s: invalid value %q (allowed: %s)", name, v, strings.Join(allowed, ", "))
 		}
 	}
 	return nil
