@@ -17,6 +17,7 @@ import (
 
 	"github.com/bronlabs/bron-cli/internal/config"
 	"github.com/bronlabs/bron-cli/internal/output"
+	"github.com/bronlabs/bron-cli/internal/qparam"
 )
 
 // newTxSubscribeCmd builds `bron tx subscribe`.
@@ -27,10 +28,16 @@ import (
 // signal handling, JSON-line output.
 func newTxSubscribeCmd(gf *globalFlags) *cobra.Command {
 	var (
-		accountID   string
-		statuses    string
-		txTypes     string
-		withHistory bool
+		accountID      string
+		accountIDs     string
+		txID           string
+		txIDs          string
+		statuses       string
+		statusNotIn    string
+		txTypes        string
+		createdAtFrom  string
+		createdAtTo    string
+		withHistory    bool
 	)
 	cmd := &cobra.Command{
 		Use:   "subscribe",
@@ -51,12 +58,15 @@ watchers ("show me as transactions move into signing-required"). Pass
 before the live stream begins (useful for scripts that need a full snapshot
 plus live tail in one command).
 
-Filter flags mirror the list endpoint: --accountId, --transactionStatuses,
---transactionTypes.`,
+Filter flags mirror the list endpoint: --accountId, --accountIds,
+--transactionId, --transactionIds, --transactionTypes, --transactionStatuses,
+--transactionStatusNotIn, --createdAtFrom, --createdAtTo.`,
 		Example: `  bron tx subscribe
   bron tx subscribe --with-history
+  bron tx subscribe --transactionId <txId>                                  # follow one tx
   bron tx subscribe --transactionStatuses signing-required,waiting-approval
   bron tx subscribe --accountId <accountId> --transactionTypes withdrawal,bridge
+  bron tx subscribe --transactionStatusNotIn canceled,expired,error
   bron tx subscribe | jq 'select(.status=="signed") | .transactionId'`,
 		RunE: func(c *cobra.Command, args []string) error {
 			cfg, err := config.Load()
@@ -106,7 +116,18 @@ Filter flags mirror the list endpoint: --accountId, --transactionStatuses,
 				Proxy:       profile.Proxy,
 			}, sdkOpts...)
 
-			filter := buildTxFilter(accountID, statuses, txTypes, withHistory)
+			filter := buildTxFilter(txFilterArgs{
+				accountID:     accountID,
+				accountIDs:    accountIDs,
+				txID:          txID,
+				txIDs:         txIDs,
+				statuses:      statuses,
+				statusNotIn:   statusNotIn,
+				txTypes:       txTypes,
+				createdAtFrom: createdAtFrom,
+				createdAtTo:   createdAtTo,
+				withHistory:   withHistory,
+			})
 
 			ctx, cancel := signal.NotifyContext(c.Context(), os.Interrupt, syscall.SIGTERM)
 			defer cancel()
@@ -132,10 +153,32 @@ Filter flags mirror the list endpoint: --accountId, --transactionStatuses,
 		},
 	}
 	cmd.Flags().StringVar(&accountID, "accountId", "", "filter by account ID")
+	cmd.Flags().StringVar(&accountIDs, "accountIds", "", "comma-separated account IDs")
+	cmd.Flags().StringVar(&txID, "transactionId", "", "follow one transaction by ID")
+	cmd.Flags().StringVar(&txIDs, "transactionIds", "", "comma-separated transaction IDs")
 	cmd.Flags().StringVar(&statuses, "transactionStatuses", "", "comma-separated status filter (e.g. signing-required,waiting-approval)")
+	cmd.Flags().StringVar(&statusNotIn, "transactionStatusNotIn", "", "comma-separated statuses to exclude (e.g. canceled,expired,error)")
 	cmd.Flags().StringVar(&txTypes, "transactionTypes", "", "comma-separated transactionType filter (e.g. withdrawal,bridge)")
+	cmd.Flags().StringVar(&createdAtFrom, "createdAtFrom", "", "filter by created date since timestamp (ISO-8601 or epoch millis)")
+	cmd.Flags().StringVar(&createdAtTo, "createdAtTo", "", "filter by created date until timestamp (ISO-8601 or epoch millis)")
 	cmd.Flags().BoolVar(&withHistory, "with-history", false, "also replay every currently-matching transaction on connect, before the live stream begins (off by default — most watchers want live-only)")
 	return cmd
+}
+
+// txFilterArgs groups flag values for the SUBSCRIBE envelope body. Adding to
+// this struct + a single `if v != "" filter[k] = ...` line below is the only
+// place new filters need to be wired through — no other call sites.
+type txFilterArgs struct {
+	accountID     string
+	accountIDs    string
+	txID          string
+	txIDs         string
+	statuses      string
+	statusNotIn   string
+	txTypes       string
+	createdAtFrom string
+	createdAtTo   string
+	withHistory   bool
 }
 
 // buildTxFilter assembles the SUBSCRIBE envelope body as a map. Map (vs the
@@ -147,18 +190,46 @@ Filter flags mirror the list endpoint: --accountId, --transactionStatuses,
 // live updates — that's the default for `bron tx subscribe`. The user opts
 // into replay with --with-history, which omits the limit and lets the
 // backend send everything matching the filter on connect.
-func buildTxFilter(accountID, statuses, txTypes string, withHistory bool) map[string]interface{} {
+func buildTxFilter(args txFilterArgs) map[string]interface{} {
 	filter := map[string]interface{}{}
-	if accountID != "" {
-		filter["accountId"] = accountID
+	if args.accountID != "" {
+		filter["accountId"] = args.accountID
 	}
-	if statuses != "" {
-		filter["transactionStatuses"] = splitCSV(statuses)
+	if args.accountIDs != "" {
+		filter["accountIds"] = splitCSV(args.accountIDs)
 	}
-	if txTypes != "" {
-		filter["transactionTypes"] = splitCSV(txTypes)
+	if args.txID != "" {
+		filter["transactionId"] = args.txID
 	}
-	if !withHistory {
+	if args.txIDs != "" {
+		filter["transactionIds"] = splitCSV(args.txIDs)
+	}
+	if args.statuses != "" {
+		filter["transactionStatuses"] = splitCSV(args.statuses)
+	}
+	if args.statusNotIn != "" {
+		filter["transactionStatusNotIn"] = splitCSV(args.statusNotIn)
+	}
+	if args.txTypes != "" {
+		filter["transactionTypes"] = splitCSV(args.txTypes)
+	}
+	for k, v := range map[string]string{
+		"createdAtFrom": args.createdAtFrom,
+		"createdAtTo":   args.createdAtTo,
+	} {
+		if v == "" {
+			continue
+		}
+		coerced, err := qparam.MaybeDate(k, v)
+		if err != nil {
+			// Surface as a backend-level filter mismatch rather than a CLI
+			// hard-fail — the WS dispatcher will reject invalid timestamps.
+			filter[k] = v
+			continue
+		}
+		filter[k] = coerced
+	}
+	if !args.withHistory {
 		filter["limit"] = 0
 	}
 	return filter

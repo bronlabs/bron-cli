@@ -834,6 +834,25 @@ func emitResourceGroup(b *bytes.Buffer, g resourceGroup, provideVar string, shor
 		emitTxShortcut(b, s, provideVar)
 	}
 
+	// And mirror the same shortcuts under `bron tx dry-run <type>` — same flat
+	// `--params.*` flags as `bron tx <type>`, but POSTs to /transactions/dry-run.
+	// Attaches as children of the existing generated `dry-run` command, so
+	// `bron tx dry-run --transactionType … --json …` keeps working unchanged.
+	if len(shortcuts) > 0 {
+		fmt.Fprintln(b, "\t\tvar dryRunCmd *cobra.Command")
+		fmt.Fprintln(b, "\t\tfor _, c := range res.Commands() {")
+		fmt.Fprintln(b, "\t\t\tif c.Name() == \"dry-run\" {")
+		fmt.Fprintln(b, "\t\t\t\tdryRunCmd = c")
+		fmt.Fprintln(b, "\t\t\t\tbreak")
+		fmt.Fprintln(b, "\t\t\t}")
+		fmt.Fprintln(b, "\t\t}")
+		fmt.Fprintln(b, "\t\tif dryRunCmd != nil {")
+		for _, s := range shortcuts {
+			emitTxDryRunShortcut(b, s, provideVar)
+		}
+		fmt.Fprintln(b, "\t\t}")
+	}
+
 	// `bron <resource>` with no verb: default to `list` if available, otherwise
 	// emit an error pointing at the available actions.
 	if hasList {
@@ -1092,6 +1111,76 @@ func emitTxShortcut(b *bytes.Buffer, s txShortcut, provideVar string) {
 	fmt.Fprintln(b, `			cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")`)
 	fmt.Fprintln(b, `			cmd.MarkFlagsMutuallyExclusive("file", "json")`)
 	fmt.Fprintln(b, "\t\t\tres.AddCommand(cmd)")
+	fmt.Fprintln(b, "\t\t}")
+}
+
+// emitTxDryRunShortcut mirrors emitTxShortcut but POSTs to /transactions/dry-run
+// and attaches the resulting Cobra command to `dryRunCmd` (the generated
+// `bron tx dry-run` parent) instead of `res`. Body composition, flag set, and
+// fields map are identical — same `CreateTransaction` request shape, same
+// `Estimations`-style typed response.
+func emitTxDryRunShortcut(b *bytes.Buffer, s txShortcut, provideVar string) {
+	fmt.Fprintln(b, "\t\t{")
+
+	for _, f := range s.TopFields {
+		fmt.Fprintf(b, "\t\t\tvar f_%s string\n", goSafeIdent(f.DotPath))
+	}
+	for _, p := range s.Params {
+		fmt.Fprintf(b, "\t\t\tvar p_%s string\n", goSafeIdent(p.DotPath))
+	}
+	fmt.Fprintln(b, "\t\t\tvar fileFlag string")
+	fmt.Fprintln(b, "\t\t\tvar jsonFlag string")
+
+	fmt.Fprintln(b, "\t\t\tcmd := &cobra.Command{")
+	fmt.Fprintf(b, "\t\t\t\tUse:   %q,\n", s.Key)
+	fmt.Fprintf(b, "\t\t\t\tShort: %q,\n", "dry-run "+s.Key+" transaction")
+	fmt.Fprintln(b, "\t\t\t\tRunE: func(cmd *cobra.Command, args []string) error {")
+	fmt.Fprintf(b, "\t\t\t\t\tcli, err := %s()\n", provideVar)
+	fmt.Fprintln(b, "\t\t\t\t\tif err != nil {")
+	fmt.Fprintln(b, "\t\t\t\t\t\treturn err")
+	fmt.Fprintln(b, "\t\t\t\t\t}")
+	fmt.Fprintln(b, "\t\t\t\t\tbaseline, err := body.Parse(fileFlag, jsonFlag)")
+	fmt.Fprintln(b, "\t\t\t\t\tif err != nil {")
+	fmt.Fprintln(b, "\t\t\t\t\t\treturn err")
+	fmt.Fprintln(b, "\t\t\t\t\t}")
+	fmt.Fprintln(b, "\t\t\t\t\tfields := map[string]string{")
+	fmt.Fprintf(b, "\t\t\t\t\t\t\"transactionType\": %q,\n", s.Key)
+	for _, f := range s.TopFields {
+		fmt.Fprintf(b, "\t\t\t\t\t\t%q: f_%s,\n", f.DotPath, goSafeIdent(f.DotPath))
+	}
+	for _, p := range s.Params {
+		fmt.Fprintf(b, "\t\t\t\t\t\t%q: p_%s,\n", "params."+p.DotPath, goSafeIdent(p.DotPath))
+	}
+	fmt.Fprintln(b, "\t\t\t\t\t}")
+	fmt.Fprintln(b, "\t\t\t\t\tpayload, err := body.Compose(baseline, fields)")
+	fmt.Fprintln(b, "\t\t\t\t\tif err != nil {")
+	fmt.Fprintln(b, "\t\t\t\t\t\treturn err")
+	fmt.Fprintln(b, "\t\t\t\t\t}")
+	fmt.Fprintln(b, "\t\t\t\t\tif err := qparam.CoerceBodyDates(payload); err != nil {")
+	fmt.Fprintln(b, "\t\t\t\t\t\treturn err")
+	fmt.Fprintln(b, "\t\t\t\t\t}")
+	fmt.Fprintln(b, "\t\t\t\t\tvar pathParams map[string]string")
+	fmt.Fprintln(b, "\t\t\t\t\tvar query interface{}")
+	fmt.Fprintln(b, "\t\t\t\t\tvar result interface{}")
+	fmt.Fprintln(b, `					if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/dry-run", pathParams, payload, query, &result); err != nil {`)
+	fmt.Fprintln(b, "\t\t\t\t\t\treturn err")
+	fmt.Fprintln(b, "\t\t\t\t\t}")
+	fmt.Fprintln(b, "\t\t\t\t\treturn output.Print(result)")
+	fmt.Fprintln(b, "\t\t\t\t},")
+	fmt.Fprintln(b, "\t\t\t}")
+
+	for _, f := range s.TopFields {
+		fmt.Fprintf(b, "\t\t\tcmd.Flags().StringVar(&f_%s, %q, \"\", %q)\n",
+			goSafeIdent(f.DotPath), f.DotPath, flagHelp(f.Type, f.Format, f.Description, f.Enum, false))
+	}
+	for _, p := range s.Params {
+		fmt.Fprintf(b, "\t\t\tcmd.Flags().StringVar(&p_%s, %q, \"\", %q)\n",
+			goSafeIdent(p.DotPath), "params."+p.DotPath, flagHelp(p.Type, p.Format, p.Description, p.Enum, false))
+	}
+	fmt.Fprintln(b, `			cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")`)
+	fmt.Fprintln(b, `			cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")`)
+	fmt.Fprintln(b, `			cmd.MarkFlagsMutuallyExclusive("file", "json")`)
+	fmt.Fprintln(b, "\t\t\tdryRunCmd.AddCommand(cmd)")
 	fmt.Fprintln(b, "\t\t}")
 }
 

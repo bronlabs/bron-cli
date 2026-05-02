@@ -2686,6 +2686,990 @@ func Register(root *cobra.Command, provide ClientProvider) {
 			cmd.MarkFlagsMutuallyExclusive("file", "json")
 			res.AddCommand(cmd)
 		}
+		var dryRunCmd *cobra.Command
+		for _, c := range res.Commands() {
+			if c.Name() == "dry-run" {
+				dryRunCmd = c
+				break
+			}
+		}
+		if dryRunCmd != nil {
+			{
+				var f_accountId string
+				var f_description string
+				var f_expiresAt string
+				var f_externalId string
+				var p_assetId string
+				var fileFlag string
+				var jsonFlag string
+				cmd := &cobra.Command{
+					Use:   "address-activation",
+					Short: "dry-run address-activation transaction",
+					RunE: func(cmd *cobra.Command, args []string) error {
+						cli, err := provide()
+						if err != nil {
+							return err
+						}
+						baseline, err := body.Parse(fileFlag, jsonFlag)
+						if err != nil {
+							return err
+						}
+						fields := map[string]string{
+							"transactionType": "address-activation",
+							"accountId":       f_accountId,
+							"description":     f_description,
+							"expiresAt":       f_expiresAt,
+							"externalId":      f_externalId,
+							"params.assetId":  p_assetId,
+						}
+						payload, err := body.Compose(baseline, fields)
+						if err != nil {
+							return err
+						}
+						if err := qparam.CoerceBodyDates(payload); err != nil {
+							return err
+						}
+						var pathParams map[string]string
+						var query interface{}
+						var result interface{}
+						if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/dry-run", pathParams, payload, query, &result); err != nil {
+							return err
+						}
+						return output.Print(result)
+					},
+				}
+				cmd.Flags().StringVar(&f_accountId, "accountId", "", "[string] The id of the account where the transaction should be placed")
+				cmd.Flags().StringVar(&f_description, "description", "", "[string] The description of the transaction")
+				cmd.Flags().StringVar(&f_expiresAt, "expiresAt", "", "[string<date-time-millis>] Optional expiration time for the transaction")
+				cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
+				cmd.Flags().StringVar(&p_assetId, "params.assetId", "", "[string] ")
+				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
+				cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
+				cmd.MarkFlagsMutuallyExclusive("file", "json")
+				dryRunCmd.AddCommand(cmd)
+			}
+			{
+				var f_accountId string
+				var f_description string
+				var f_expiresAt string
+				var f_externalId string
+				var p_assetId string
+				var fileFlag string
+				var jsonFlag string
+				cmd := &cobra.Command{
+					Use:   "address-creation",
+					Short: "dry-run address-creation transaction",
+					RunE: func(cmd *cobra.Command, args []string) error {
+						cli, err := provide()
+						if err != nil {
+							return err
+						}
+						baseline, err := body.Parse(fileFlag, jsonFlag)
+						if err != nil {
+							return err
+						}
+						fields := map[string]string{
+							"transactionType": "address-creation",
+							"accountId":       f_accountId,
+							"description":     f_description,
+							"expiresAt":       f_expiresAt,
+							"externalId":      f_externalId,
+							"params.assetId":  p_assetId,
+						}
+						payload, err := body.Compose(baseline, fields)
+						if err != nil {
+							return err
+						}
+						if err := qparam.CoerceBodyDates(payload); err != nil {
+							return err
+						}
+						var pathParams map[string]string
+						var query interface{}
+						var result interface{}
+						if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/dry-run", pathParams, payload, query, &result); err != nil {
+							return err
+						}
+						return output.Print(result)
+					},
+				}
+				cmd.Flags().StringVar(&f_accountId, "accountId", "", "[string] The id of the account where the transaction should be placed")
+				cmd.Flags().StringVar(&f_description, "description", "", "[string] The description of the transaction")
+				cmd.Flags().StringVar(&f_expiresAt, "expiresAt", "", "[string<date-time-millis>] Optional expiration time for the transaction")
+				cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
+				cmd.Flags().StringVar(&p_assetId, "params.assetId", "", "[string] ")
+				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
+				cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
+				cmd.MarkFlagsMutuallyExclusive("file", "json")
+				dryRunCmd.AddCommand(cmd)
+			}
+			{
+				var f_accountId string
+				var f_description string
+				var f_expiresAt string
+				var f_externalId string
+				var p_amount string
+				var p_assetId string
+				var p_feeLevel string
+				var p_networkFees_feePerByte string
+				var p_networkFees_gasLimit string
+				var p_networkFees_gasPriceGwei string
+				var p_networkFees_maxFeePerGas string
+				var p_networkFees_maxPriorityFeePerGas string
+				var p_toAddress string
+				var p_unlimited string
+				var fileFlag string
+				var jsonFlag string
+				cmd := &cobra.Command{
+					Use:   "allowance",
+					Short: "dry-run allowance transaction",
+					RunE: func(cmd *cobra.Command, args []string) error {
+						cli, err := provide()
+						if err != nil {
+							return err
+						}
+						baseline, err := body.Parse(fileFlag, jsonFlag)
+						if err != nil {
+							return err
+						}
+						fields := map[string]string{
+							"transactionType":                         "allowance",
+							"accountId":                               f_accountId,
+							"description":                             f_description,
+							"expiresAt":                               f_expiresAt,
+							"externalId":                              f_externalId,
+							"params.amount":                           p_amount,
+							"params.assetId":                          p_assetId,
+							"params.feeLevel":                         p_feeLevel,
+							"params.networkFees.feePerByte":           p_networkFees_feePerByte,
+							"params.networkFees.gasLimit":             p_networkFees_gasLimit,
+							"params.networkFees.gasPriceGwei":         p_networkFees_gasPriceGwei,
+							"params.networkFees.maxFeePerGas":         p_networkFees_maxFeePerGas,
+							"params.networkFees.maxPriorityFeePerGas": p_networkFees_maxPriorityFeePerGas,
+							"params.toAddress":                        p_toAddress,
+							"params.unlimited":                        p_unlimited,
+						}
+						payload, err := body.Compose(baseline, fields)
+						if err != nil {
+							return err
+						}
+						if err := qparam.CoerceBodyDates(payload); err != nil {
+							return err
+						}
+						var pathParams map[string]string
+						var query interface{}
+						var result interface{}
+						if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/dry-run", pathParams, payload, query, &result); err != nil {
+							return err
+						}
+						return output.Print(result)
+					},
+				}
+				cmd.Flags().StringVar(&f_accountId, "accountId", "", "[string] The id of the account where the transaction should be placed")
+				cmd.Flags().StringVar(&f_description, "description", "", "[string] The description of the transaction")
+				cmd.Flags().StringVar(&f_expiresAt, "expiresAt", "", "[string<date-time-millis>] Optional expiration time for the transaction")
+				cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
+				cmd.Flags().StringVar(&p_amount, "params.amount", "", "[string<decimal>] ")
+				cmd.Flags().StringVar(&p_assetId, "params.assetId", "", "[string] ")
+				cmd.Flags().StringVar(&p_feeLevel, "params.feeLevel", "", "[string] (enum: low|medium|high)")
+				cmd.Flags().StringVar(&p_networkFees_feePerByte, "params.networkFees.feePerByte", "", "[string<int64>] ")
+				cmd.Flags().StringVar(&p_networkFees_gasLimit, "params.networkFees.gasLimit", "", "[string<int64>] ")
+				cmd.Flags().StringVar(&p_networkFees_gasPriceGwei, "params.networkFees.gasPriceGwei", "", "[string<decimal>] ")
+				cmd.Flags().StringVar(&p_networkFees_maxFeePerGas, "params.networkFees.maxFeePerGas", "", "[string<decimal>] ")
+				cmd.Flags().StringVar(&p_networkFees_maxPriorityFeePerGas, "params.networkFees.maxPriorityFeePerGas", "", "[string<decimal>] ")
+				cmd.Flags().StringVar(&p_toAddress, "params.toAddress", "", "[string] ")
+				cmd.Flags().StringVar(&p_unlimited, "params.unlimited", "", "[boolean] ")
+				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
+				cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
+				cmd.MarkFlagsMutuallyExclusive("file", "json")
+				dryRunCmd.AddCommand(cmd)
+			}
+			{
+				var f_accountId string
+				var f_description string
+				var f_expiresAt string
+				var f_externalId string
+				var p_amount string
+				var p_feeLevel string
+				var p_sourceAssetId string
+				var fileFlag string
+				var jsonFlag string
+				cmd := &cobra.Command{
+					Use:   "bridge",
+					Short: "dry-run bridge transaction",
+					RunE: func(cmd *cobra.Command, args []string) error {
+						cli, err := provide()
+						if err != nil {
+							return err
+						}
+						baseline, err := body.Parse(fileFlag, jsonFlag)
+						if err != nil {
+							return err
+						}
+						fields := map[string]string{
+							"transactionType":      "bridge",
+							"accountId":            f_accountId,
+							"description":          f_description,
+							"expiresAt":            f_expiresAt,
+							"externalId":           f_externalId,
+							"params.amount":        p_amount,
+							"params.feeLevel":      p_feeLevel,
+							"params.sourceAssetId": p_sourceAssetId,
+						}
+						payload, err := body.Compose(baseline, fields)
+						if err != nil {
+							return err
+						}
+						if err := qparam.CoerceBodyDates(payload); err != nil {
+							return err
+						}
+						var pathParams map[string]string
+						var query interface{}
+						var result interface{}
+						if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/dry-run", pathParams, payload, query, &result); err != nil {
+							return err
+						}
+						return output.Print(result)
+					},
+				}
+				cmd.Flags().StringVar(&f_accountId, "accountId", "", "[string] The id of the account where the transaction should be placed")
+				cmd.Flags().StringVar(&f_description, "description", "", "[string] The description of the transaction")
+				cmd.Flags().StringVar(&f_expiresAt, "expiresAt", "", "[string<date-time-millis>] Optional expiration time for the transaction")
+				cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
+				cmd.Flags().StringVar(&p_amount, "params.amount", "", "[string<decimal>] The amount to bridge")
+				cmd.Flags().StringVar(&p_feeLevel, "params.feeLevel", "", "[string] The fee level for the source-network withdrawal (enum: low|medium|high)")
+				cmd.Flags().StringVar(&p_sourceAssetId, "params.sourceAssetId", "", "[string] The asset ID on the source network")
+				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
+				cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
+				cmd.MarkFlagsMutuallyExclusive("file", "json")
+				dryRunCmd.AddCommand(cmd)
+			}
+			{
+				var f_accountId string
+				var f_description string
+				var f_expiresAt string
+				var f_externalId string
+				var p_data string
+				var p_externalBroadcast string
+				var p_feeLevel string
+				var p_networkId string
+				var p_origin string
+				var p_rawTransactions string
+				var p_to string
+				var p_value string
+				var fileFlag string
+				var jsonFlag string
+				cmd := &cobra.Command{
+					Use:   "defi",
+					Short: "dry-run defi transaction",
+					RunE: func(cmd *cobra.Command, args []string) error {
+						cli, err := provide()
+						if err != nil {
+							return err
+						}
+						baseline, err := body.Parse(fileFlag, jsonFlag)
+						if err != nil {
+							return err
+						}
+						fields := map[string]string{
+							"transactionType":          "defi",
+							"accountId":                f_accountId,
+							"description":              f_description,
+							"expiresAt":                f_expiresAt,
+							"externalId":               f_externalId,
+							"params.data":              p_data,
+							"params.externalBroadcast": p_externalBroadcast,
+							"params.feeLevel":          p_feeLevel,
+							"params.networkId":         p_networkId,
+							"params.origin":            p_origin,
+							"params.rawTransactions":   p_rawTransactions,
+							"params.to":                p_to,
+							"params.value":             p_value,
+						}
+						payload, err := body.Compose(baseline, fields)
+						if err != nil {
+							return err
+						}
+						if err := qparam.CoerceBodyDates(payload); err != nil {
+							return err
+						}
+						var pathParams map[string]string
+						var query interface{}
+						var result interface{}
+						if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/dry-run", pathParams, payload, query, &result); err != nil {
+							return err
+						}
+						return output.Print(result)
+					},
+				}
+				cmd.Flags().StringVar(&f_accountId, "accountId", "", "[string] The id of the account where the transaction should be placed")
+				cmd.Flags().StringVar(&f_description, "description", "", "[string] The description of the transaction")
+				cmd.Flags().StringVar(&f_expiresAt, "expiresAt", "", "[string<date-time-millis>] Optional expiration time for the transaction")
+				cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
+				cmd.Flags().StringVar(&p_data, "params.data", "", "[string] ")
+				cmd.Flags().StringVar(&p_externalBroadcast, "params.externalBroadcast", "", "[boolean] ")
+				cmd.Flags().StringVar(&p_feeLevel, "params.feeLevel", "", "[string] (enum: low|medium|high)")
+				cmd.Flags().StringVar(&p_networkId, "params.networkId", "", "[string] ")
+				cmd.Flags().StringVar(&p_origin, "params.origin", "", "[string] Origin of defi operation")
+				cmd.Flags().StringVar(&p_rawTransactions, "params.rawTransactions", "", "[string[]] ")
+				cmd.Flags().StringVar(&p_to, "params.to", "", "[string] ")
+				cmd.Flags().StringVar(&p_value, "params.value", "", "[string] ")
+				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
+				cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
+				cmd.MarkFlagsMutuallyExclusive("file", "json")
+				dryRunCmd.AddCommand(cmd)
+			}
+			{
+				var f_accountId string
+				var f_description string
+				var f_expiresAt string
+				var f_externalId string
+				var p_message string
+				var p_networkId string
+				var p_origin string
+				var p_version string
+				var fileFlag string
+				var jsonFlag string
+				cmd := &cobra.Command{
+					Use:   "defi-message",
+					Short: "dry-run defi-message transaction",
+					RunE: func(cmd *cobra.Command, args []string) error {
+						cli, err := provide()
+						if err != nil {
+							return err
+						}
+						baseline, err := body.Parse(fileFlag, jsonFlag)
+						if err != nil {
+							return err
+						}
+						fields := map[string]string{
+							"transactionType":  "defi-message",
+							"accountId":        f_accountId,
+							"description":      f_description,
+							"expiresAt":        f_expiresAt,
+							"externalId":       f_externalId,
+							"params.message":   p_message,
+							"params.networkId": p_networkId,
+							"params.origin":    p_origin,
+							"params.version":   p_version,
+						}
+						payload, err := body.Compose(baseline, fields)
+						if err != nil {
+							return err
+						}
+						if err := qparam.CoerceBodyDates(payload); err != nil {
+							return err
+						}
+						var pathParams map[string]string
+						var query interface{}
+						var result interface{}
+						if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/dry-run", pathParams, payload, query, &result); err != nil {
+							return err
+						}
+						return output.Print(result)
+					},
+				}
+				cmd.Flags().StringVar(&f_accountId, "accountId", "", "[string] The id of the account where the transaction should be placed")
+				cmd.Flags().StringVar(&f_description, "description", "", "[string] The description of the transaction")
+				cmd.Flags().StringVar(&f_expiresAt, "expiresAt", "", "[string<date-time-millis>] Optional expiration time for the transaction")
+				cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
+				cmd.Flags().StringVar(&p_message, "params.message", "", "[string] ")
+				cmd.Flags().StringVar(&p_networkId, "params.networkId", "", "[string] ")
+				cmd.Flags().StringVar(&p_origin, "params.origin", "", "[string] Origin of defi operation")
+				cmd.Flags().StringVar(&p_version, "params.version", "", "[string] ")
+				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
+				cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
+				cmd.MarkFlagsMutuallyExclusive("file", "json")
+				dryRunCmd.AddCommand(cmd)
+			}
+			{
+				var f_accountId string
+				var f_description string
+				var f_expiresAt string
+				var f_externalId string
+				var p_amount string
+				var p_assetId string
+				var p_networkId string
+				var fileFlag string
+				var jsonFlag string
+				cmd := &cobra.Command{
+					Use:   "deposit",
+					Short: "dry-run deposit transaction",
+					RunE: func(cmd *cobra.Command, args []string) error {
+						cli, err := provide()
+						if err != nil {
+							return err
+						}
+						baseline, err := body.Parse(fileFlag, jsonFlag)
+						if err != nil {
+							return err
+						}
+						fields := map[string]string{
+							"transactionType":  "deposit",
+							"accountId":        f_accountId,
+							"description":      f_description,
+							"expiresAt":        f_expiresAt,
+							"externalId":       f_externalId,
+							"params.amount":    p_amount,
+							"params.assetId":   p_assetId,
+							"params.networkId": p_networkId,
+						}
+						payload, err := body.Compose(baseline, fields)
+						if err != nil {
+							return err
+						}
+						if err := qparam.CoerceBodyDates(payload); err != nil {
+							return err
+						}
+						var pathParams map[string]string
+						var query interface{}
+						var result interface{}
+						if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/dry-run", pathParams, payload, query, &result); err != nil {
+							return err
+						}
+						return output.Print(result)
+					},
+				}
+				cmd.Flags().StringVar(&f_accountId, "accountId", "", "[string] The id of the account where the transaction should be placed")
+				cmd.Flags().StringVar(&f_description, "description", "", "[string] The description of the transaction")
+				cmd.Flags().StringVar(&f_expiresAt, "expiresAt", "", "[string<date-time-millis>] Optional expiration time for the transaction")
+				cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
+				cmd.Flags().StringVar(&p_amount, "params.amount", "", "[string<decimal>] The amount of transaction")
+				cmd.Flags().StringVar(&p_assetId, "params.assetId", "", "[string] The asset ID for the transaction")
+				cmd.Flags().StringVar(&p_networkId, "params.networkId", "", "[string] The asset's blockchain network name for the transaction")
+				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
+				cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
+				cmd.MarkFlagsMutuallyExclusive("file", "json")
+				dryRunCmd.AddCommand(cmd)
+			}
+			{
+				var f_accountId string
+				var f_description string
+				var f_expiresAt string
+				var f_externalId string
+				var p_amount string
+				var p_assetId string
+				var p_fiatAmount string
+				var p_fiatAssetId string
+				var fileFlag string
+				var jsonFlag string
+				cmd := &cobra.Command{
+					Use:   "fiat-in",
+					Short: "dry-run fiat-in transaction",
+					RunE: func(cmd *cobra.Command, args []string) error {
+						cli, err := provide()
+						if err != nil {
+							return err
+						}
+						baseline, err := body.Parse(fileFlag, jsonFlag)
+						if err != nil {
+							return err
+						}
+						fields := map[string]string{
+							"transactionType":    "fiat-in",
+							"accountId":          f_accountId,
+							"description":        f_description,
+							"expiresAt":          f_expiresAt,
+							"externalId":         f_externalId,
+							"params.amount":      p_amount,
+							"params.assetId":     p_assetId,
+							"params.fiatAmount":  p_fiatAmount,
+							"params.fiatAssetId": p_fiatAssetId,
+						}
+						payload, err := body.Compose(baseline, fields)
+						if err != nil {
+							return err
+						}
+						if err := qparam.CoerceBodyDates(payload); err != nil {
+							return err
+						}
+						var pathParams map[string]string
+						var query interface{}
+						var result interface{}
+						if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/dry-run", pathParams, payload, query, &result); err != nil {
+							return err
+						}
+						return output.Print(result)
+					},
+				}
+				cmd.Flags().StringVar(&f_accountId, "accountId", "", "[string] The id of the account where the transaction should be placed")
+				cmd.Flags().StringVar(&f_description, "description", "", "[string] The description of the transaction")
+				cmd.Flags().StringVar(&f_expiresAt, "expiresAt", "", "[string<date-time-millis>] Optional expiration time for the transaction")
+				cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
+				cmd.Flags().StringVar(&p_amount, "params.amount", "", "[string<decimal>] Amount to deposit")
+				cmd.Flags().StringVar(&p_assetId, "params.assetId", "", "[string] Target crypto asset to receive")
+				cmd.Flags().StringVar(&p_fiatAmount, "params.fiatAmount", "", "[string<decimal>] Fiat amount to pay")
+				cmd.Flags().StringVar(&p_fiatAssetId, "params.fiatAssetId", "", "[string] Source fiat asset")
+				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
+				cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
+				cmd.MarkFlagsMutuallyExclusive("file", "json")
+				dryRunCmd.AddCommand(cmd)
+			}
+			{
+				var f_accountId string
+				var f_description string
+				var f_expiresAt string
+				var f_externalId string
+				var p_amount string
+				var p_assetId string
+				var p_feeLevel string
+				var p_fiatAssetId string
+				var p_networkId string
+				var p_toAddressBookRecordId string
+				var fileFlag string
+				var jsonFlag string
+				cmd := &cobra.Command{
+					Use:   "fiat-out",
+					Short: "dry-run fiat-out transaction",
+					RunE: func(cmd *cobra.Command, args []string) error {
+						cli, err := provide()
+						if err != nil {
+							return err
+						}
+						baseline, err := body.Parse(fileFlag, jsonFlag)
+						if err != nil {
+							return err
+						}
+						fields := map[string]string{
+							"transactionType":              "fiat-out",
+							"accountId":                    f_accountId,
+							"description":                  f_description,
+							"expiresAt":                    f_expiresAt,
+							"externalId":                   f_externalId,
+							"params.amount":                p_amount,
+							"params.assetId":               p_assetId,
+							"params.feeLevel":              p_feeLevel,
+							"params.fiatAssetId":           p_fiatAssetId,
+							"params.networkId":             p_networkId,
+							"params.toAddressBookRecordId": p_toAddressBookRecordId,
+						}
+						payload, err := body.Compose(baseline, fields)
+						if err != nil {
+							return err
+						}
+						if err := qparam.CoerceBodyDates(payload); err != nil {
+							return err
+						}
+						var pathParams map[string]string
+						var query interface{}
+						var result interface{}
+						if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/dry-run", pathParams, payload, query, &result); err != nil {
+							return err
+						}
+						return output.Print(result)
+					},
+				}
+				cmd.Flags().StringVar(&f_accountId, "accountId", "", "[string] The id of the account where the transaction should be placed")
+				cmd.Flags().StringVar(&f_description, "description", "", "[string] The description of the transaction")
+				cmd.Flags().StringVar(&f_expiresAt, "expiresAt", "", "[string<date-time-millis>] Optional expiration time for the transaction")
+				cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
+				cmd.Flags().StringVar(&p_amount, "params.amount", "", "[string<decimal>] Crypto amount to sell")
+				cmd.Flags().StringVar(&p_assetId, "params.assetId", "", "[string] Crypto asset to sell")
+				cmd.Flags().StringVar(&p_feeLevel, "params.feeLevel", "", "[string] (enum: low|medium|high)")
+				cmd.Flags().StringVar(&p_fiatAssetId, "params.fiatAssetId", "", "[string] Target fiat asset")
+				cmd.Flags().StringVar(&p_networkId, "params.networkId", "", "[string] Network to send crypto from")
+				cmd.Flags().StringVar(&p_toAddressBookRecordId, "params.toAddressBookRecordId", "", "[string] Bank account record ID from address book")
+				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
+				cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
+				cmd.MarkFlagsMutuallyExclusive("file", "json")
+				dryRunCmd.AddCommand(cmd)
+			}
+			{
+				var f_accountId string
+				var f_description string
+				var f_expiresAt string
+				var f_externalId string
+				var p_feeLevel string
+				var p_intentId string
+				var fileFlag string
+				var jsonFlag string
+				cmd := &cobra.Command{
+					Use:   "intents",
+					Short: "dry-run intents transaction",
+					RunE: func(cmd *cobra.Command, args []string) error {
+						cli, err := provide()
+						if err != nil {
+							return err
+						}
+						baseline, err := body.Parse(fileFlag, jsonFlag)
+						if err != nil {
+							return err
+						}
+						fields := map[string]string{
+							"transactionType": "intents",
+							"accountId":       f_accountId,
+							"description":     f_description,
+							"expiresAt":       f_expiresAt,
+							"externalId":      f_externalId,
+							"params.feeLevel": p_feeLevel,
+							"params.intentId": p_intentId,
+						}
+						payload, err := body.Compose(baseline, fields)
+						if err != nil {
+							return err
+						}
+						if err := qparam.CoerceBodyDates(payload); err != nil {
+							return err
+						}
+						var pathParams map[string]string
+						var query interface{}
+						var result interface{}
+						if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/dry-run", pathParams, payload, query, &result); err != nil {
+							return err
+						}
+						return output.Print(result)
+					},
+				}
+				cmd.Flags().StringVar(&f_accountId, "accountId", "", "[string] The id of the account where the transaction should be placed")
+				cmd.Flags().StringVar(&f_description, "description", "", "[string] The description of the transaction")
+				cmd.Flags().StringVar(&f_expiresAt, "expiresAt", "", "[string<date-time-millis>] Optional expiration time for the transaction")
+				cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
+				cmd.Flags().StringVar(&p_feeLevel, "params.feeLevel", "", "[string] (enum: low|medium|high)")
+				cmd.Flags().StringVar(&p_intentId, "params.intentId", "", "[string] ")
+				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
+				cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
+				cmd.MarkFlagsMutuallyExclusive("file", "json")
+				dryRunCmd.AddCommand(cmd)
+			}
+			{
+				var f_accountId string
+				var f_description string
+				var f_expiresAt string
+				var f_externalId string
+				var p_amount string
+				var p_assetId string
+				var p_stakeId string
+				var fileFlag string
+				var jsonFlag string
+				cmd := &cobra.Command{
+					Use:   "stake-claim",
+					Short: "dry-run stake-claim transaction",
+					RunE: func(cmd *cobra.Command, args []string) error {
+						cli, err := provide()
+						if err != nil {
+							return err
+						}
+						baseline, err := body.Parse(fileFlag, jsonFlag)
+						if err != nil {
+							return err
+						}
+						fields := map[string]string{
+							"transactionType": "stake-claim",
+							"accountId":       f_accountId,
+							"description":     f_description,
+							"expiresAt":       f_expiresAt,
+							"externalId":      f_externalId,
+							"params.amount":   p_amount,
+							"params.assetId":  p_assetId,
+							"params.stakeId":  p_stakeId,
+						}
+						payload, err := body.Compose(baseline, fields)
+						if err != nil {
+							return err
+						}
+						if err := qparam.CoerceBodyDates(payload); err != nil {
+							return err
+						}
+						var pathParams map[string]string
+						var query interface{}
+						var result interface{}
+						if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/dry-run", pathParams, payload, query, &result); err != nil {
+							return err
+						}
+						return output.Print(result)
+					},
+				}
+				cmd.Flags().StringVar(&f_accountId, "accountId", "", "[string] The id of the account where the transaction should be placed")
+				cmd.Flags().StringVar(&f_description, "description", "", "[string] The description of the transaction")
+				cmd.Flags().StringVar(&f_expiresAt, "expiresAt", "", "[string<date-time-millis>] Optional expiration time for the transaction")
+				cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
+				cmd.Flags().StringVar(&p_amount, "params.amount", "", "[string<decimal>] ")
+				cmd.Flags().StringVar(&p_assetId, "params.assetId", "", "[string] ")
+				cmd.Flags().StringVar(&p_stakeId, "params.stakeId", "", "[string] ")
+				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
+				cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
+				cmd.MarkFlagsMutuallyExclusive("file", "json")
+				dryRunCmd.AddCommand(cmd)
+			}
+			{
+				var f_accountId string
+				var f_description string
+				var f_expiresAt string
+				var f_externalId string
+				var p_amount string
+				var p_assetId string
+				var p_poolId string
+				var fileFlag string
+				var jsonFlag string
+				cmd := &cobra.Command{
+					Use:   "stake-delegation",
+					Short: "dry-run stake-delegation transaction",
+					RunE: func(cmd *cobra.Command, args []string) error {
+						cli, err := provide()
+						if err != nil {
+							return err
+						}
+						baseline, err := body.Parse(fileFlag, jsonFlag)
+						if err != nil {
+							return err
+						}
+						fields := map[string]string{
+							"transactionType": "stake-delegation",
+							"accountId":       f_accountId,
+							"description":     f_description,
+							"expiresAt":       f_expiresAt,
+							"externalId":      f_externalId,
+							"params.amount":   p_amount,
+							"params.assetId":  p_assetId,
+							"params.poolId":   p_poolId,
+						}
+						payload, err := body.Compose(baseline, fields)
+						if err != nil {
+							return err
+						}
+						if err := qparam.CoerceBodyDates(payload); err != nil {
+							return err
+						}
+						var pathParams map[string]string
+						var query interface{}
+						var result interface{}
+						if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/dry-run", pathParams, payload, query, &result); err != nil {
+							return err
+						}
+						return output.Print(result)
+					},
+				}
+				cmd.Flags().StringVar(&f_accountId, "accountId", "", "[string] The id of the account where the transaction should be placed")
+				cmd.Flags().StringVar(&f_description, "description", "", "[string] The description of the transaction")
+				cmd.Flags().StringVar(&f_expiresAt, "expiresAt", "", "[string<date-time-millis>] Optional expiration time for the transaction")
+				cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
+				cmd.Flags().StringVar(&p_amount, "params.amount", "", "[string<decimal>] ")
+				cmd.Flags().StringVar(&p_assetId, "params.assetId", "", "[string] ")
+				cmd.Flags().StringVar(&p_poolId, "params.poolId", "", "[string] ")
+				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
+				cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
+				cmd.MarkFlagsMutuallyExclusive("file", "json")
+				dryRunCmd.AddCommand(cmd)
+			}
+			{
+				var f_accountId string
+				var f_description string
+				var f_expiresAt string
+				var f_externalId string
+				var p_amount string
+				var p_assetId string
+				var p_stakeId string
+				var fileFlag string
+				var jsonFlag string
+				cmd := &cobra.Command{
+					Use:   "stake-undelegation",
+					Short: "dry-run stake-undelegation transaction",
+					RunE: func(cmd *cobra.Command, args []string) error {
+						cli, err := provide()
+						if err != nil {
+							return err
+						}
+						baseline, err := body.Parse(fileFlag, jsonFlag)
+						if err != nil {
+							return err
+						}
+						fields := map[string]string{
+							"transactionType": "stake-undelegation",
+							"accountId":       f_accountId,
+							"description":     f_description,
+							"expiresAt":       f_expiresAt,
+							"externalId":      f_externalId,
+							"params.amount":   p_amount,
+							"params.assetId":  p_assetId,
+							"params.stakeId":  p_stakeId,
+						}
+						payload, err := body.Compose(baseline, fields)
+						if err != nil {
+							return err
+						}
+						if err := qparam.CoerceBodyDates(payload); err != nil {
+							return err
+						}
+						var pathParams map[string]string
+						var query interface{}
+						var result interface{}
+						if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/dry-run", pathParams, payload, query, &result); err != nil {
+							return err
+						}
+						return output.Print(result)
+					},
+				}
+				cmd.Flags().StringVar(&f_accountId, "accountId", "", "[string] The id of the account where the transaction should be placed")
+				cmd.Flags().StringVar(&f_description, "description", "", "[string] The description of the transaction")
+				cmd.Flags().StringVar(&f_expiresAt, "expiresAt", "", "[string<date-time-millis>] Optional expiration time for the transaction")
+				cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
+				cmd.Flags().StringVar(&p_amount, "params.amount", "", "[string<decimal>] ")
+				cmd.Flags().StringVar(&p_assetId, "params.assetId", "", "[string] ")
+				cmd.Flags().StringVar(&p_stakeId, "params.stakeId", "", "[string] ")
+				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
+				cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
+				cmd.MarkFlagsMutuallyExclusive("file", "json")
+				dryRunCmd.AddCommand(cmd)
+			}
+			{
+				var f_accountId string
+				var f_description string
+				var f_expiresAt string
+				var f_externalId string
+				var p_amount string
+				var p_assetId string
+				var p_poolId string
+				var fileFlag string
+				var jsonFlag string
+				cmd := &cobra.Command{
+					Use:   "stake-withdrawal",
+					Short: "dry-run stake-withdrawal transaction",
+					RunE: func(cmd *cobra.Command, args []string) error {
+						cli, err := provide()
+						if err != nil {
+							return err
+						}
+						baseline, err := body.Parse(fileFlag, jsonFlag)
+						if err != nil {
+							return err
+						}
+						fields := map[string]string{
+							"transactionType": "stake-withdrawal",
+							"accountId":       f_accountId,
+							"description":     f_description,
+							"expiresAt":       f_expiresAt,
+							"externalId":      f_externalId,
+							"params.amount":   p_amount,
+							"params.assetId":  p_assetId,
+							"params.poolId":   p_poolId,
+						}
+						payload, err := body.Compose(baseline, fields)
+						if err != nil {
+							return err
+						}
+						if err := qparam.CoerceBodyDates(payload); err != nil {
+							return err
+						}
+						var pathParams map[string]string
+						var query interface{}
+						var result interface{}
+						if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/dry-run", pathParams, payload, query, &result); err != nil {
+							return err
+						}
+						return output.Print(result)
+					},
+				}
+				cmd.Flags().StringVar(&f_accountId, "accountId", "", "[string] The id of the account where the transaction should be placed")
+				cmd.Flags().StringVar(&f_description, "description", "", "[string] The description of the transaction")
+				cmd.Flags().StringVar(&f_expiresAt, "expiresAt", "", "[string<date-time-millis>] Optional expiration time for the transaction")
+				cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
+				cmd.Flags().StringVar(&p_amount, "params.amount", "", "[string<decimal>] ")
+				cmd.Flags().StringVar(&p_assetId, "params.assetId", "", "[string] ")
+				cmd.Flags().StringVar(&p_poolId, "params.poolId", "", "[string] ")
+				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
+				cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
+				cmd.MarkFlagsMutuallyExclusive("file", "json")
+				dryRunCmd.AddCommand(cmd)
+			}
+			{
+				var f_accountId string
+				var f_description string
+				var f_expiresAt string
+				var f_externalId string
+				var p_amount string
+				var p_assetId string
+				var p_feeLevel string
+				var p_includeFee string
+				var p_memo string
+				var p_networkFees_feePerByte string
+				var p_networkFees_gasLimit string
+				var p_networkFees_gasPriceGwei string
+				var p_networkFees_maxFeePerGas string
+				var p_networkFees_maxPriorityFeePerGas string
+				var p_networkId string
+				var p_symbol string
+				var p_toAccountId string
+				var p_toAddress string
+				var p_toAddressBookRecordId string
+				var p_toWorkspaceTag string
+				var fileFlag string
+				var jsonFlag string
+				cmd := &cobra.Command{
+					Use:   "withdrawal",
+					Short: "dry-run withdrawal transaction",
+					RunE: func(cmd *cobra.Command, args []string) error {
+						cli, err := provide()
+						if err != nil {
+							return err
+						}
+						baseline, err := body.Parse(fileFlag, jsonFlag)
+						if err != nil {
+							return err
+						}
+						fields := map[string]string{
+							"transactionType":                         "withdrawal",
+							"accountId":                               f_accountId,
+							"description":                             f_description,
+							"expiresAt":                               f_expiresAt,
+							"externalId":                              f_externalId,
+							"params.amount":                           p_amount,
+							"params.assetId":                          p_assetId,
+							"params.feeLevel":                         p_feeLevel,
+							"params.includeFee":                       p_includeFee,
+							"params.memo":                             p_memo,
+							"params.networkFees.feePerByte":           p_networkFees_feePerByte,
+							"params.networkFees.gasLimit":             p_networkFees_gasLimit,
+							"params.networkFees.gasPriceGwei":         p_networkFees_gasPriceGwei,
+							"params.networkFees.maxFeePerGas":         p_networkFees_maxFeePerGas,
+							"params.networkFees.maxPriorityFeePerGas": p_networkFees_maxPriorityFeePerGas,
+							"params.networkId":                        p_networkId,
+							"params.symbol":                           p_symbol,
+							"params.toAccountId":                      p_toAccountId,
+							"params.toAddress":                        p_toAddress,
+							"params.toAddressBookRecordId":            p_toAddressBookRecordId,
+							"params.toWorkspaceTag":                   p_toWorkspaceTag,
+						}
+						payload, err := body.Compose(baseline, fields)
+						if err != nil {
+							return err
+						}
+						if err := qparam.CoerceBodyDates(payload); err != nil {
+							return err
+						}
+						var pathParams map[string]string
+						var query interface{}
+						var result interface{}
+						if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/dry-run", pathParams, payload, query, &result); err != nil {
+							return err
+						}
+						return output.Print(result)
+					},
+				}
+				cmd.Flags().StringVar(&f_accountId, "accountId", "", "[string] The id of the account where the transaction should be placed")
+				cmd.Flags().StringVar(&f_description, "description", "", "[string] The description of the transaction")
+				cmd.Flags().StringVar(&f_expiresAt, "expiresAt", "", "[string<date-time-millis>] Optional expiration time for the transaction")
+				cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
+				cmd.Flags().StringVar(&p_amount, "params.amount", "", "[string<decimal>] The amount of transaction")
+				cmd.Flags().StringVar(&p_assetId, "params.assetId", "", "[string] The asset ID for the transaction")
+				cmd.Flags().StringVar(&p_feeLevel, "params.feeLevel", "", "[string] The fee level for the withdrawal (enum: low|medium|high)")
+				cmd.Flags().StringVar(&p_includeFee, "params.includeFee", "", "[boolean] Indicates whether the fee should be included in the withdrawal amount or added on top of it")
+				cmd.Flags().StringVar(&p_memo, "params.memo", "", "[string] Memo for the transaction")
+				cmd.Flags().StringVar(&p_networkFees_feePerByte, "params.networkFees.feePerByte", "", "[string<int64>] ")
+				cmd.Flags().StringVar(&p_networkFees_gasLimit, "params.networkFees.gasLimit", "", "[string<int64>] ")
+				cmd.Flags().StringVar(&p_networkFees_gasPriceGwei, "params.networkFees.gasPriceGwei", "", "[string<decimal>] ")
+				cmd.Flags().StringVar(&p_networkFees_maxFeePerGas, "params.networkFees.maxFeePerGas", "", "[string<decimal>] ")
+				cmd.Flags().StringVar(&p_networkFees_maxPriorityFeePerGas, "params.networkFees.maxPriorityFeePerGas", "", "[string<decimal>] ")
+				cmd.Flags().StringVar(&p_networkId, "params.networkId", "", "[string] The asset's blockchain network name for the transaction")
+				cmd.Flags().StringVar(&p_symbol, "params.symbol", "", "[string] The asset's symbol for the transaction")
+				cmd.Flags().StringVar(&p_toAccountId, "params.toAccountId", "", "[string] In case of a transfer on a different account, the ID of the destination account")
+				cmd.Flags().StringVar(&p_toAddress, "params.toAddress", "", "[string] Destination address for the transaction")
+				cmd.Flags().StringVar(&p_toAddressBookRecordId, "params.toAddressBookRecordId", "", "[string] In case of a withdrawal to address from address book, the ID of the address book record")
+				cmd.Flags().StringVar(&p_toWorkspaceTag, "params.toWorkspaceTag", "", "[string] Destination workspace tag for the transaction (e.g. 'tesla')")
+				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
+				cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
+				cmd.MarkFlagsMutuallyExclusive("file", "json")
+				dryRunCmd.AddCommand(cmd)
+			}
+		}
 		for _, c := range res.Commands() {
 			if c.Name() == "list" {
 				res.RunE = c.RunE
