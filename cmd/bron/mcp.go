@@ -189,7 +189,39 @@ Security model — important to read before using these tools:
 4. **Read-only mode**: if the operator launched this server with
    ` + "`bron mcp --read-only`" + `, only GET endpoints + ` + "`bron_tx_dry_run`" + ` are
    registered. Don't try to call write tools that aren't listed —
-   ` + "`tools/list`" + ` reflects the active mode.`
+   ` + "`tools/list`" + ` reflects the active mode.
+
+Tool selection — route the user's intent to the narrowest tool:
+
+  - "balance", "holdings", "portfolio", "net worth", "what do I hold" →
+    ` + "`bron_balances_list`" + ` (on-chain balances per asset).
+  - "accounts", "vaults", "wallets" → ` + "`bron_accounts_list`" + ` /
+    ` + "`bron_accounts_get`" + `.
+  - "transactions", "history", "recent activity" → ` + "`bron_tx_list`" + `;
+    one by id → ` + "`bron_tx_get`" + `; its lifecycle events → ` + "`bron_tx_events`" + `.
+  - "send", "send on-chain", "move assets out" → ` + "`bron_tx_withdrawal`" + `
+    (state-changing). Staking → the ` + "`bron_tx_stake_*`" + ` shortcuts.
+  - "approve / decline / cancel a pending transaction" →
+    ` + "`bron_tx_approve` / `bron_tx_decline` / `bron_tx_cancel`" + `.
+  - "saved addresses", "address book" → ` + "`bron_address_book_list`" + ` /
+    ` + "`bron_address_book_get`" + `.
+  - "wait until it completes / is approved / settles" →
+    ` + "`bron_tx_wait_for_state`" + ` (long-poll; re-call on timeout).
+  - workspace info / settings → ` + "`bron_workspace_info`" + `.
+
+  When several tools could answer, prefer the narrowest read tool and only
+  escalate to a write tool after explicit user confirmation (rule 2).
+
+Presentation:
+
+  - Amounts are exact decimal strings — render them verbatim; never parse
+    them into a float or round them.
+  - Timestamps are ISO-8601; keep the raw value available even if you also
+    show a localised form.
+  - For a multi-asset / portfolio answer prefer a compact table or a chart
+    artifact over raw JSON.
+  - On an error, surface the ` + "`id`" + ` (correlation id) so the user can quote
+    it to support.`
 
 // wrapUntrustedFields walks a JSON-shaped value tree and wraps known
 // user-controlled string fields (`description`, `memo`, `note`, `comment`,
