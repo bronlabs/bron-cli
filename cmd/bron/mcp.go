@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -24,6 +25,7 @@ import (
 	"github.com/bronlabs/bron-cli/generated"
 	"github.com/bronlabs/bron-cli/internal/body"
 	"github.com/bronlabs/bron-cli/internal/client"
+	"github.com/bronlabs/bron-cli/internal/jqfilter"
 	"github.com/bronlabs/bron-cli/internal/output"
 	"github.com/bronlabs/bron-cli/internal/qparam"
 )
@@ -221,7 +223,25 @@ Presentation:
   - For a multi-asset / portfolio answer prefer a compact table or a chart
     artifact over raw JSON.
   - On an error, surface the ` + "`id`" + ` (correlation id) so the user can quote
-    it to support.`
+    it to support.
+
+Response shaping — read tools take two optional, composable arguments to keep
+their replies (and your context) small:
+
+  - ` + "`fields`" + ` — comma-separated dot-paths to keep, e.g.
+    ` + "`transactionId,status,params.amount`" + ` or nested ` + "`_embedded.usdValue`" + `.
+    One entry per leaf — no brace/group syntax, so list each leaf
+    (` + "`_embedded.price,_embedded.baseAssetId`" + `, not ` + "`_embedded.{price,baseAssetId}`" + `).
+    A path crossing an array applies to every element. Cheap, no surprises —
+    reach for this first.
+  - ` + "`jq`" + ` — a jq program (gojq-compatible) for filtering/aggregation
+    beyond plain projection, e.g.
+    ` + "`[.transactions[] | select(.status==\"pending\") | {id: .transactionId, amt: .params.amount}]`" + `.
+    Runs server-side after ` + "`fields`" + `. Sandboxed: no env, no stdin, no
+    imports; time- and size-bounded. A bad program returns an error you can
+    correct and retry.
+
+Omit both for the full object.`
 
 // wrapUntrustedFields walks a JSON-shaped value tree and wraps known
 // user-controlled string fields (`description`, `memo`, `note`, `comment`,
@@ -394,8 +414,51 @@ func registerEndpoint(server *mcp.Server, cli *client.Client, resource, verb str
 				}
 			}
 		}
-		return nil, wrapUntrustedFields(output.HumanizeDates(result)), nil
+		shaped := output.Project(result, fieldsFromInput(in))
+		if prog := jqFromInput(in); prog != "" {
+			shaped, err = jqfilter.Run(prog, output.Plain(shaped))
+			if err != nil {
+				return errorResult(err), nil, nil
+			}
+		}
+		return nil, wrapUntrustedFields(output.HumanizeDates(shaped)), nil
 	})
+}
+
+// fieldsFromInput pulls the `fields` value (comma-separated dot-paths) out of
+// the agent-passed input for response projection. Absent / empty → no
+// projection (the full object is returned).
+func fieldsFromInput(in map[string]any) []string {
+	raw, ok := in["fields"]
+	if !ok || raw == nil {
+		return nil
+	}
+	s, ok := raw.(string)
+	if !ok {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// jqFromInput pulls the `jq` program string out of the agent-passed input.
+// Absent / empty / non-string → "" (no transform).
+func jqFromInput(in map[string]any) string {
+	raw, ok := in["jq"]
+	if !ok || raw == nil {
+		return ""
+	}
+	s, ok := raw.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(s)
 }
 
 // embedTokensFromInput pulls the `embed` value out of the agent-passed input
@@ -568,6 +631,17 @@ func endpointSchema(resource, verb string, e generated.HelpEntry, aug *embedAugm
 		}
 	}
 
+	if e.Method == "GET" {
+		props["fields"] = &jsonschema.Schema{
+			Type:        "string",
+			Description: "Keep only these dot-paths, e.g. `transactionId,params.amount` (see server instructions).",
+		}
+		props["jq"] = &jsonschema.Schema{
+			Type:        "string",
+			Description: "gojq program to reshape/filter the reply server-side, after `fields` (see server instructions).",
+		}
+	}
+
 	if e.Method != "GET" && e.Method != "DELETE" {
 		// Generic write surface: a free-form `body` (full request body as JSON
 		// object) for callers that already know the BodyRef shape, plus the
@@ -588,6 +662,34 @@ func endpointSchema(resource, verb string, e generated.HelpEntry, aug *embedAugm
 		Required:             required,
 		AdditionalProperties: &jsonschema.Schema{},
 	}
+}
+
+// maxInlineEnum caps how many enum values we inline into a tool schema.
+// Only an oversized niche list crosses it (the 37-value activity-type filter,
+// ~1k chars and repeated twice) — its values are dropped and the agent is
+// pointed at `--schema`, trading a one-off lookup for context re-read every
+// session. Common tx status/type enums (≤28 values) stay inline so the model
+// fills them without a round-trip.
+const maxInlineEnum = 30
+
+var (
+	mdSeePointerRe = regexp.MustCompile(`\s*\[[Ss]ee [^\]]*\]\(/[^)]*\)`)
+	mdDocLinkRe    = regexp.MustCompile(`\[([^\]]+)\]\(/[^)]*\)`)
+	multiDotRe     = regexp.MustCompile(`\.\s*\.`)
+	multiSpaceRe   = regexp.MustCompile(`\s{2,}`)
+)
+
+// slimDesc strips MCP-only fat from a spec-sourced description: internal
+// markdown doc-links the model can't follow. "See details" pointers are
+// dropped outright; any other internal link is unwrapped to its text. The
+// human-facing OpenAPI/Mintlify copy keeps the links — only the schema the
+// agent loads every session is slimmed.
+func slimDesc(s string) string {
+	s = mdSeePointerRe.ReplaceAllString(s, "")
+	s = mdDocLinkRe.ReplaceAllString(s, "$1")
+	s = multiDotRe.ReplaceAllString(s, ".")
+	s = multiSpaceRe.ReplaceAllString(s, " ")
+	return strings.TrimSpace(s)
 }
 
 // queryParamSchema maps one OpenAPI query parameter to a JSON Schema.
@@ -621,24 +723,34 @@ func queryParamSchema(q generated.HelpQueryParam) *jsonschema.Schema {
 	}
 
 	if qparam.IsDateParam(q.Name) {
-		s.Description = "ISO 8601 (`2026-04-01T00:00:00Z` or `2026-04-01`) or epoch millis. Auto-coerced to millis on the wire."
+		s.Description = "ISO 8601 or epoch ms."
 	} else if q.Description != "" {
-		s.Description = q.Description
+		s.Description = slimDesc(q.Description)
 	}
 
 	if q.Type == "array" || (strings.HasSuffix(q.Type, "[]") && q.Type != "") {
 		const hint = "Comma-separated."
-		if s.Description == "" {
+		lower := strings.ToLower(s.Description)
+		alreadyNoted := strings.Contains(lower, "comma-separat") || strings.Contains(lower, "comma separat")
+		switch {
+		case s.Description == "":
 			s.Description = hint
-		} else {
+		case !alreadyNoted:
 			s.Description = strings.TrimRight(s.Description, ". ") + ". " + hint
 		}
 	}
 
-	if len(q.Enum) > 0 {
-		s.Enum = make([]any, 0, len(q.Enum))
+	if n := len(q.Enum); n > 0 && n <= maxInlineEnum {
+		s.Enum = make([]any, 0, n)
 		for _, e := range q.Enum {
 			s.Enum = append(s.Enum, e)
+		}
+	} else if n > maxInlineEnum {
+		note := fmt.Sprintf("One of %d enum values — pass the one you want; run the CLI with `--schema` for the full list.", n)
+		if s.Description == "" {
+			s.Description = note
+		} else {
+			s.Description = strings.TrimRight(s.Description, ". ") + ". " + note
 		}
 	}
 	return s
@@ -661,10 +773,7 @@ func txShortcutSchema(sc generated.TxShortcut) *jsonschema.Schema {
 		}
 	}
 	for _, p := range sc.Params {
-		props[p] = &jsonschema.Schema{
-			Type:        "string",
-			Description: fmt.Sprintf("`params.%s` — see the OpenAPI spec for shape (numbers/booleans pass as strings, JSON-parsed before sending).", p),
-		}
+		props[p] = &jsonschema.Schema{Type: "string"}
 	}
 	return &jsonschema.Schema{
 		Type:                 "object",

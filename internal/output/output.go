@@ -77,7 +77,7 @@ func Print(v interface{}) error {
 	// honors the global `columns` list); for json/yaml/jsonl we narrow
 	// the value here so the rendered output mirrors the user's pick.
 	if len(columns) > 0 && f != "table" {
-		v = applyColumns(v)
+		v = projectPaths(v, columns)
 	}
 	// Convert epoch-millis date fields to ISO-8601 across every format. The
 	// public API ships timestamps as 13-digit millisecond strings ("1777304897620"),
@@ -187,67 +187,130 @@ func (o orderedMap) MarshalYAML() (interface{}, error) {
 	return n, nil
 }
 
-// applyColumns narrows v to the fields in `columns`. For maps, picks listed
-// keys in order. For arrays, applies recursively. For the typical list-shape
-// `{"transactions": [...]}`, recurses into the inner array.
-func applyColumns(v interface{}) interface{} {
+// Project narrows v to the given dot-paths, returning a new tree (the input is
+// not mutated). Empty cols returns v unchanged.
+//
+// Arrays are traversed transparently: a path segment that lands on an array is
+// applied to every element, so `events.type` keeps `type` from each object in
+// the `events` array, and the outer list envelope ({"transactions":[...]})
+// needs no prefix. Paths sharing a prefix merge under it — `_embedded.price`
+// plus `_embedded.baseAssetId` yields one `_embedded` object carrying both.
+// There is no brace-group syntax; list each leaf path.
+//
+// This is the same projection `--columns` applies to json/yaml output, exposed
+// as a pure function so the MCP server can shape tool responses per call
+// without touching the package-global `columns` (its handlers run concurrently).
+func Project(v interface{}, cols []string) interface{} {
+	if len(cols) == 0 {
+		return v
+	}
+	return projectPaths(v, cols)
+}
+
+// Plain converts the order-preserving orderedMap nodes that Project produces
+// back into plain map[string]interface{} throughout v, leaving every other
+// value (and number type) untouched. Consumers that expect standard JSON
+// container types — gojq in particular — panic on the orderedMap wrapper;
+// run the value through Plain first. Returns a new tree.
+func Plain(v interface{}) interface{} {
 	switch t := v.(type) {
+	case orderedMap:
+		m := make(map[string]interface{}, len(t.keys))
+		for _, k := range t.keys {
+			m[k] = Plain(t.vals[k])
+		}
+		return m
+	case map[string]interface{}:
+		m := make(map[string]interface{}, len(t))
+		for k, val := range t {
+			m[k] = Plain(val)
+		}
+		return m
 	case []interface{}:
 		out := make([]interface{}, len(t))
-		for i, item := range t {
-			out[i] = applyColumns(item)
+		for i, val := range t {
+			out[i] = Plain(val)
 		}
 		return out
-	case map[string]interface{}:
-		if len(t) == 1 {
-			for k, val := range t {
-				if arr, ok := val.([]interface{}); ok {
-					return map[string]interface{}{k: applyColumns(arr)}
-				}
-			}
-		}
-		return pickFields(t)
 	}
 	return v
 }
 
-func pickFields(m map[string]interface{}) interface{} {
+// projectPaths keeps only the listed dot-paths from v. Arrays recurse with the
+// same paths; the single-array envelope ({"transactions":[...]}) is unwrapped
+// so paths are written relative to each element.
+func projectPaths(v interface{}, paths []string) interface{} {
+	switch t := v.(type) {
+	case []interface{}:
+		out := make([]interface{}, len(t))
+		for i, item := range t {
+			out[i] = projectPaths(item, paths)
+		}
+		return out
+	case map[string]interface{}:
+		if key, arr, ok := singleArrayEnvelope(t, paths); ok {
+			return map[string]interface{}{key: projectPaths(arr, paths)}
+		}
+		return pickFields(t, paths)
+	}
+	return v
+}
+
+// singleArrayEnvelope detects the list wrapper ({"transactions":[...]}): a
+// one-key map whose value is an array and whose key isn't itself a requested
+// path head. Returns the key, the array, and true when v should be unwrapped.
+func singleArrayEnvelope(m map[string]interface{}, paths []string) (string, []interface{}, bool) {
+	if len(m) != 1 {
+		return "", nil, false
+	}
+	for k, val := range m {
+		arr, ok := val.([]interface{})
+		if !ok {
+			return "", nil, false
+		}
+		for _, p := range paths {
+			if head, _, _ := strings.Cut(p, "."); head == k {
+				return "", nil, false
+			}
+		}
+		return k, arr, true
+	}
+	return "", nil, false
+}
+
+// pickFields keeps the listed paths from a map, grouping by head segment so
+// paths sharing a prefix descend together and merge under it. A bare head (no
+// dot) takes that field whole; a dotted head descends into the child value
+// (recursing through arrays via projectPaths). Output key order follows the
+// order paths were first seen.
+func pickFields(m map[string]interface{}, paths []string) interface{} {
+	order := []string{}
+	tails := map[string][]string{}
+	for _, p := range paths {
+		head, tail, hasTail := strings.Cut(p, ".")
+		if _, seen := tails[head]; !seen {
+			order = append(order, head)
+			tails[head] = nil
+		}
+		if hasTail {
+			tails[head] = append(tails[head], tail)
+		}
+	}
+
 	om := &orderedMap{vals: map[string]interface{}{}}
-	for _, c := range columns {
-		val, ok := getDotPath(m, c)
+	for _, head := range order {
+		val, ok := m[head]
 		if !ok {
 			continue
 		}
-		setOrderedDotPath(om, c, val)
+		om.keys = append(om.keys, head)
+		if sub := tails[head]; len(sub) > 0 {
+			om.vals[head] = projectPaths(val, sub)
+		} else {
+			om.vals[head] = val
+		}
 	}
 	return *om
-}
-
-// setOrderedDotPath places val into om at the given dot-path, creating
-// intermediate orderedMaps so the rendered JSON / YAML keeps the nested
-// shape ({"params": {"amount": "10"}}) instead of flat dotted keys.
-func setOrderedDotPath(om *orderedMap, path string, val interface{}) {
-	parts := strings.SplitN(path, ".", 2)
-	root := parts[0]
-	if len(parts) == 1 {
-		if _, exists := om.vals[root]; !exists {
-			om.keys = append(om.keys, root)
-		}
-		om.vals[root] = val
-		return
-	}
-	var sub *orderedMap
-	if existing, ok := om.vals[root]; ok {
-		if e, ok := existing.(orderedMap); ok {
-			sub = &orderedMap{keys: append([]string(nil), e.keys...), vals: e.vals}
-		}
-	}
-	if sub == nil {
-		om.keys = append(om.keys, root)
-		sub = &orderedMap{vals: map[string]interface{}{}}
-	}
-	setOrderedDotPath(sub, parts[1], val)
-	om.vals[root] = *sub
 }
 
 // getDotPath walks a "foo.bar.baz" path through nested maps. Returns the leaf
@@ -720,4 +783,3 @@ func colorizeJSON(b []byte) []byte {
 	}
 	return out.Bytes()
 }
-
