@@ -64,11 +64,11 @@ var helpTopics = map[string]string{
 		"All assume `bron_tx_list` with `includeEvents: true`. Amounts come from\n" +
 		"`_embedded.events[]`, the settlement facts.\n\n" +
 		"**Total USD volume** (sum of every event's usd value):\n" +
-		"```\n[.transactions[]._embedded.events[]? | (.usdAmount|tonumber? // 0)] | add\n```\n\n" +
+		"```\n[.transactions[]._embedded.events[]? | (.usdAmount // \"0\" | tonumber)] | add\n```\n\n" +
 		"**Net USD flow** (in positive, out negative):\n" +
-		"```\n[.transactions[]._embedded.events[]? | (.usdAmount|tonumber? // 0) * (if .eventType==\"in\" then 1 else -1 end)] | add\n```\n\n" +
+		"```\n[.transactions[]._embedded.events[]? | (.usdAmount // \"0\" | tonumber) * (if .eventType==\"in\" then 1 else -1 end)] | add\n```\n\n" +
 		"**Net amount per asset:**\n" +
-		"```\n[.transactions[]._embedded.events[]? | {k:(.assetId+\"|\"+.symbol), amt:((.amount|tonumber? // 0)*(if .eventType==\"in\" then 1 else -1 end))}]\n| group_by(.k) | map({asset:.[0].k, net:(map(.amt)|add)})\n```\n\n" +
+		"```\n[.transactions[]._embedded.events[]? | {k:(.assetId+\"|\"+.symbol), amt:((.amount // \"0\" | tonumber)*(if .eventType==\"in\" then 1 else -1 end))}]\n| group_by(.k) | map({asset:.[0].k, net:(map(.amt)|add)})\n```\n\n" +
 		"**Count by status:**\n" +
 		"```\n.transactions | group_by(.status) | map({status:.[0].status, n:length})\n```\n",
 	"events-vs-params": "# Settlement (events) vs intent (params)\n\n" +

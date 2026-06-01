@@ -1,6 +1,33 @@
 # Changelog
 
-## Unreleased
+## 0.3.12 — 2026-06-01
+
+### Fixed
+- `bron_help` `tx-aggregation` recipes used postfix `tonumber?`, which silently drops a whole object on a null/non-numeric input. Switched to null-safe `(.x // "0" | tonumber)`.
+
+## 0.3.11 — 2026-06-01
+
+### Added
+- MCP response shaping on every read tool. `fields` projects the reply to a comma-separated list of dot-paths (array-aware: a path that crosses an array applies to every element); `jq` runs a [gojq](https://github.com/itchyny/gojq)-compatible program server-side for filtering, aggregation and reshaping. Both compose (`jq` after `fields`) and trim the response before it reaches an agent's context. The `jq` sandbox has no environment, stdin or module access and is time- and size-bounded.
+- `bron_help` MCP tool — read-only discovery: the data model, a tool's response shape resolved from the OpenAPI spec, and worked `jq` recipes, on demand. Keeps per-tool descriptions short.
+- Pitfall hints on `bron_tx_list` / `bron_tx_get`: for financial totals pass `includeEvents: true` and aggregate `_embedded.events`, not `params.amount`.
+
+### Changed
+- Slimmer MCP tool schemas — dead documentation links and oversized enum lists are dropped from tool descriptions, lowering the constant context every session pays.
+
+## 0.3.10 — 2026-05-31
+
+### Changed
+- `bron mcp` documents its tool-routing logic in the server instructions.
+- `Makefile`: drop the `help` target and its output.
+
+## 0.3.9 — 2026-05-02
+
+### Changed
+- `bron tx subscribe`: full filter set. `bron tx dry-run`: typed per-type subcommands.
+- OpenAPI spec synced to the 2026-05-02 build.
+
+## 0.3.8 — 2026-05-02
 
 ### Added
 - `bron mcp install --target <claude-code|claude-desktop|cursor|cline>` registers `bron mcp` with the host's `mcp.json` (or runs `claude mcp add` for Claude Code). Supports `--name`, `--read-only`, `--dry-run`. Idempotent atomic write.
