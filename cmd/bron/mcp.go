@@ -193,6 +193,11 @@ Security model — important to read before using these tools:
    registered. Don't try to call write tools that aren't listed —
    ` + "`tools/list`" + ` reflects the active mode.
 
+New here? Call ` + "`bron_help`" + ` once — it returns the data model (notably
+why financial totals come from ` + "`_embedded.events`" + `, not ` + "`params.amount`" + `),
+any tool's response shape, and jq recipes. Cheap, read-only; do it before
+computing money.
+
 Tool selection — route the user's intent to the narrowest tool:
 
   - "balance", "holdings", "portfolio", "net worth", "what do I hold" →
@@ -324,6 +329,7 @@ func walkAndWrap(v any) {
 //     `mcp_composites.go`. Stays small by design — most new behaviour belongs
 //     in the spec, not here.
 func registerTools(server *mcp.Server, cli *client.Client, sdkClient *sdk.BronClient, opts mcpOptions) {
+	registerHelpTool(server)
 	registerSpecDrivenTools(server, cli, opts)
 	registerClientComposites(server, cli, sdkClient)
 }
@@ -981,6 +987,8 @@ func actionDescription(resource, verb string, e generated.HelpEntry) string {
 // belongs in the CLI help text, not the MCP description.
 var actionDescriptions = map[string]string{
 	"workspace.info":            "Get the active workspace's metadata",
+	"tx.list":                   "List transactions. For financial totals pass `includeEvents: true` and aggregate `_embedded.events`, not `params.amount` (call `bron_help` for the model)",
+	"tx.get":                    "Get one transaction by id. For settled amounts pass `includeEvents: true` and read `_embedded.events`, not `params.amount`",
 	"assets.prices":             "Get USD market prices for assets (filter via baseAssetIds)",
 	"symbols.prices":            "Get USD market prices for symbols",
 	"tx.approve":                "Approve a transaction (signing-required → waiting-approval → signing). State-changing — confirm with the user before invoking",
