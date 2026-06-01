@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.13 — 2026-06-01
+
+### Added
+- `bron_help` now resolves a `bron_tx_<type>` shortcut to its request payload: the shared top-level fields plus the per-type `params.*` (names, types, descriptions) read from the spec, the recipient-exclusivity note, and a dry-run pointer. One discovery call covers every transaction type instead of memorising 15 shortcut schemas. `bron_tx_create` / shortcut descriptions point at it.
+
+### Changed
+- `bron_tx_<type>` shortcut params are typed from the spec (today that means `boolean` flags like `unlimited` / `includeFee`), not blanket `string` — agents send a real `true` without quoting. `amount` and other decimals stay `string` to preserve precision.
+
+### Fixed
+- `bron_tx_get` description no longer claims an `includeEvents` argument it doesn't accept — it now points at `bron_tx_events` for settlement amounts.
+- `bron_tx_<type>` shortcut `body` argument: corrected the precedence note — the individual fields override matching keys in `body`, not the reverse.
+- MCP server instructions tool-routing map now covers staking (read), deposits, and fiat on/off-ramp.
+
 ## 0.3.12 — 2026-06-01
 
 ### Fixed

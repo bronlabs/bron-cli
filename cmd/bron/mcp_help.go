@@ -41,7 +41,8 @@ const helpOverview = "# Bron MCP — agent guide\n\n" +
 	"`_embedded.events[]`, never `params.amount`.** Summing `params.amount`\n" +
 	"gives a plausible but wrong number, especially for swaps, bridges,\n" +
 	"intents, fiat and fee-bearing transfers. Events are omitted by default —\n" +
-	"pass `includeEvents: true` on `bron_tx_list` / `bron_tx_get` to get them.\n\n" +
+	"pass `includeEvents: true` on `bron_tx_list` to get them; for a single\n" +
+	"transaction call `bron_tx_events` (`bron_tx_get` does not accept it).\n\n" +
 	"## Shaping responses (save your context)\n\n" +
 	"Both are optional and compose; `jq` runs after `fields`:\n\n" +
 	"- `fields` — comma-separated dot-paths to keep, e.g.\n" +
@@ -57,7 +58,11 @@ const helpOverview = "# Bron MCP — agent guide\n\n" +
 	"## Schema (call with tool:\"…\")\n\n" +
 	"Pass any read tool name (e.g. `tool:\"bron_tx_list\"`) to see its response\n" +
 	"shape resolved from the OpenAPI spec — field names, types and notes — so\n" +
-	"you can write `fields`/`jq` without guessing."
+	"you can write `fields`/`jq` without guessing.\n\n" +
+	"For a `bron_tx_<type>` shortcut (e.g. `tool:\"bron_tx_withdrawal\"`) it\n" +
+	"renders that type's request payload instead — the shared top-level fields\n" +
+	"plus the per-type `params.*`, so you can compose any transaction type from\n" +
+	"one place rather than memorising 15 shortcut schemas."
 
 var helpTopics = map[string]string{
 	"tx-aggregation": "# jq recipes — transaction aggregation\n\n" +
@@ -104,7 +109,7 @@ func helpToolSchema() *jsonschema.Schema {
 			},
 			"tool": {
 				Type:        "string",
-				Description: "A read tool name (e.g. `bron_tx_list`) to see its response shape.",
+				Description: "A tool name to inspect: a read tool (e.g. `bron_tx_list`) for its response shape, or a `bron_tx_<type>` shortcut (e.g. `bron_tx_withdrawal`) for its per-type request params.",
 			},
 		},
 		AdditionalProperties: &jsonschema.Schema{},
@@ -153,8 +158,15 @@ func stringArg(in map[string]any, key string) string {
 }
 
 // helpForTool resolves a tool name to its endpoint and renders the response
-// schema (from the embedded spec) as a compact field listing.
+// schema (from the embedded spec) as a compact field listing. For a
+// `bron_tx_<type>` shortcut it renders the per-type request params instead —
+// the discovery path that lets the agent compose any transaction type without
+// 15 separate tool descriptions.
 func helpForTool(tool string) string {
+	if name, sc, ok := findTxShortcut(tool); ok {
+		return helpForTxShortcut(tool, name, sc)
+	}
+
 	e, ok := findHelpEntry(tool)
 	if !ok {
 		return fmt.Sprintf("Unknown tool %q. Pass an endpoint tool name like `bron_tx_list`.", tool)
@@ -165,7 +177,7 @@ func helpForTool(tool string) string {
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "# %s\n\n## Response shape\n\n", tool)
-	fields := resolveSchemaFields(e.ResponseRef)
+	fields := resolveSchemaFieldsAt(e.ResponseRef, "")
 	if len(fields) == 0 {
 		fmt.Fprintf(&sb, "(could not resolve `%s`)\n", e.ResponseRef)
 	} else {
@@ -181,6 +193,61 @@ func helpForTool(tool string) string {
 	return sb.String()
 }
 
+// helpForTxShortcut renders the request shape of a `bron_tx_<type>` shortcut:
+// the shared top-level fields plus the per-type `params.*` resolved from the
+// shortcut's ParamsRef component in the embedded spec. This is how an agent
+// discovers the payload for any transaction type from one tool.
+func helpForTxShortcut(tool, name string, sc generated.TxShortcut) string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "# %s\n\nCreates a `%s` transaction. State-changing — confirm with the user.\n\n", tool, name)
+
+	sb.WriteString("## Top-level fields (set directly, not under `params`)\n\n")
+	for _, k := range sc.TopFields {
+		if d := topFieldDescription(k); d != "" {
+			fmt.Fprintf(&sb, "- `%s` (string) — %s\n", k, d)
+		} else {
+			fmt.Fprintf(&sb, "- `%s` (string)\n", k)
+		}
+	}
+
+	fmt.Fprintf(&sb, "\n## `params.*` (specific to `%s`, from `%s`)\n\n", name, sc.ParamsRef)
+	fields := resolveSchemaFieldsAt(sc.ParamsRef, "params")
+	if len(fields) == 0 {
+		fmt.Fprintf(&sb, "(could not resolve `%s`)\n", sc.ParamsRef)
+	} else {
+		for _, f := range fields {
+			sb.WriteString(f)
+			sb.WriteString("\n")
+		}
+	}
+
+	var dests []string
+	for _, p := range sc.Params {
+		switch p {
+		case "toAddressBookRecordId", "toAccountId", "toWorkspaceTag", "toAddress":
+			dests = append(dests, p)
+		}
+	}
+	if len(dests) > 1 {
+		sb.WriteString("\nRecipient — set exactly one of " + strings.Join(dests, " / ") + " per request (mutually exclusive).\n")
+	} else if len(dests) == 1 {
+		sb.WriteString("\nRecipient — set " + dests[0] + ".\n")
+	}
+
+	sb.WriteString("\nPre-flight the same body through `bron_tx_dry_run` to preview fees, " +
+		"ETA and validation before sending.\n")
+	return sb.String()
+}
+
+func findTxShortcut(tool string) (string, generated.TxShortcut, bool) {
+	for name, sc := range generated.TxShortcuts {
+		if "bron_tx_"+sanitizeName(name) == tool {
+			return name, sc, true
+		}
+	}
+	return "", generated.TxShortcut{}, false
+}
+
 func findHelpEntry(tool string) (generated.HelpEntry, bool) {
 	for r, verbs := range generated.HelpEntries {
 		for v, e := range verbs {
@@ -192,25 +259,37 @@ func findHelpEntry(tool string) (generated.HelpEntry, bool) {
 	return generated.HelpEntry{}, false
 }
 
-// resolveSchemaFields walks the embedded OpenAPI spec from a component schema
-// name and produces a flat `path: type — description` listing, expanding $refs
-// and array items up to a bounded depth so deeply nested or recursive schemas
-// don't explode the output.
-func resolveSchemaFields(ref string) []string {
+// resolveSchemaFieldsAt walks the embedded OpenAPI spec from a component schema
+// name and produces a flat `path: type — description` listing rooted at rootPath
+// (e.g. `params` for a tx-shortcut), expanding $refs and array items up to a
+// bounded depth so deeply nested or recursive schemas don't explode the output.
+func resolveSchemaFieldsAt(ref, rootPath string) []string {
+	var out []string
+	walkSpecScalars(ref, rootPath, func(path, scalarType string, node map[string]any) {
+		out = append(out, fmt.Sprintf("- `%s` (%s)%s", path, scalarType, descSuffix(node)))
+	})
+	return out
+}
+
+// walkSpecScalars resolves a component schema from the embedded spec and invokes
+// visit for every scalar leaf, with its dot-path (rooted at rootPath, array
+// elements marked `[]`, the `embedded` bag mapped to its `_embedded` wire name)
+// and JSON type. $ref cycles and depth > 6 are guarded so recursive schemas
+// terminate.
+func walkSpecScalars(ref, rootPath string, visit func(path, scalarType string, node map[string]any)) {
 	var spec map[string]any
 	if err := json.Unmarshal(generated.Spec, &spec); err != nil {
-		return nil
+		return
 	}
 	components, _ := spec["components"].(map[string]any)
 	if components == nil {
-		return nil
+		return
 	}
 	schemas, _ := components["schemas"].(map[string]any)
 	if schemas == nil {
-		return nil
+		return
 	}
 
-	var out []string
 	seen := map[string]bool{}
 	var walk func(node any, path string, depth int)
 	walk = func(node any, path string, depth int) {
@@ -240,7 +319,7 @@ func resolveSchemaFields(ref string) []string {
 					childPath = path + "." + wireName(k)
 				}
 				if leaf, ok := scalarLeaf(child); ok {
-					out = append(out, fmt.Sprintf("- `%s` (%s)%s", childPath, leaf, descSuffix(child)))
+					visit(childPath, leaf, child)
 				} else {
 					walk(child, childPath, depth+1)
 				}
@@ -251,8 +330,7 @@ func resolveSchemaFields(ref string) []string {
 			}
 		}
 	}
-	walk(map[string]any{"$ref": "#/components/schemas/" + ref}, "", 0)
-	return out
+	walk(map[string]any{"$ref": "#/components/schemas/" + ref}, rootPath, 0)
 }
 
 // scalarLeaf returns a type label when node is a scalar (no further nesting
@@ -268,6 +346,18 @@ func wireName(prop string) string {
 		return "_embedded"
 	}
 	return prop
+}
+
+// paramTypeMap returns a dot-path → JSON-type map for the scalar leaves of a
+// component schema, so a tx-shortcut's params can be typed (e.g. `boolean`) on
+// the MCP surface instead of all-string. Keys match the dotted param names in
+// TxShortcut.Params (e.g. `unlimited`, `networkFees.gasLimit`).
+func paramTypeMap(ref string) map[string]string {
+	out := map[string]string{}
+	walkSpecScalars(ref, "", func(path, scalarType string, _ map[string]any) {
+		out[path] = scalarType
+	})
+	return out
 }
 
 func scalarLeaf(node map[string]any) (string, bool) {

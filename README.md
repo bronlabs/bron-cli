@@ -47,7 +47,8 @@ The CLI talks to the Bron API with a per-key JWT signature. You generate a P-256
 # 1. one shot: generate the keypair, print the public JWK, save the profile
 bron config init --key-file ~/.config/bron/keys/me.jwk
 
-# 2. The CLI prints the public JWK and waits. Paste the JWK into the Bron UI:
+# 2. The CLI prints the public JWK blob ({"kty":"EC",...}) and waits.
+#    Copy that blob, then open the Bron UI and paste it in:
 open https://app.bron.org/settings/api-keys     # Settings → API keys → ✓ "Input public key (JWK)"
 
 # 3. Press Enter in the CLI. It calls GET /workspaces with your fresh key,
@@ -174,7 +175,7 @@ Examples:
 
   bron tx list --output yaml --includeEvents true
   bron tx list --output table --columns transactionId,status,transactionType,createdAt
-  bron tx list --output jsonl | jq '.[] | select(.status=="signed")'    # heavier transformations: pipe to jq
+  bron tx list --output jsonl | jq 'select(.status=="signed")'    # jsonl = one object per line; jq sees each line, no .[]
 
   bron deposit-addresses list --accountId <accountId> --networkId ETH
 
@@ -334,7 +335,8 @@ bron tx list --output json  --columns transactionId,status,params.amount
 bron tx get <id>            --columns transactionId,status,params
 
 # Heavier transformations (filter / select / aggregate) — pipe to jq.
-bron tx list --output jsonl | jq '.[] | select(.status=="signed") | .transactionId'
+# jsonl emits one object per line, so jq sees each line on its own — no top-level `.[]`.
+bron tx list --output jsonl | jq 'select(.status=="signed") | .transactionId'
 ```
 
 JSON output is colored when stdout is a TTY. Disable with `NO_COLOR=1`, force on with `FORCE_COLOR=1`.
@@ -375,7 +377,7 @@ bron tx withdrawal --json '{"accountId":"acc_xxx","params":{"amount":100,"assetI
 bron tx withdrawal --file ./tx.json \
     --externalId <idempotencyKey> \
     --params.amount=250 \
-    --params.feeLevel=HIGH
+    --params.feeLevel=high
 ```
 
 ## Errors & exit codes

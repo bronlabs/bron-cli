@@ -207,7 +207,16 @@ Tool selection — route the user's intent to the narrowest tool:
   - "transactions", "history", "recent activity" → ` + "`bron_tx_list`" + `;
     one by id → ` + "`bron_tx_get`" + `; its lifecycle events → ` + "`bron_tx_events`" + `.
   - "send", "send on-chain", "move assets out" → ` + "`bron_tx_withdrawal`" + `
-    (state-changing). Staking → the ` + "`bron_tx_stake_*`" + ` shortcuts.
+    (state-changing).
+  - "staking", "positions", "delegations", "rewards" (read) →
+    ` + "`bron_stakes_list`" + `; stake / unstake / claim (state-changing) →
+    the ` + "`bron_tx_stake_*`" + ` shortcuts.
+  - "incoming", "received", "what came in" → ` + "`bron_tx_list`" + ` with
+    ` + "`transactionTypes: deposit`" + `; addresses to receive into →
+    ` + "`bron_deposit_addresses_list`" + `.
+  - "buy / sell crypto", "fiat on-ramp / off-ramp" →
+    ` + "`bron_tx_fiat_in` / `bron_tx_fiat_out`" + ` (state-changing; a regulated
+    fiat provider such as Noah runs the KYC/settlement step, not Bron).
   - "approve / decline / cancel a pending transaction" →
     ` + "`bron_tx_approve` / `bron_tx_decline` / `bron_tx_cancel`" + `.
   - "saved addresses", "address book" → ` + "`bron_address_book_list`" + ` /
@@ -769,7 +778,7 @@ func txShortcutSchema(sc generated.TxShortcut) *jsonschema.Schema {
 	props := map[string]*jsonschema.Schema{
 		"body": {
 			Type:        "object",
-			Description: fmt.Sprintf("Full request body as JSON (matches the %s top-level + params shape). Optional — overrides matching individual fields below.", sc.ParamsRef),
+			Description: fmt.Sprintf("Full request body as JSON (matches the %s top-level + params shape). Optional — the individual fields below override matching keys in `body`. Call `bron_help` with this tool's name for the per-type params schema.", sc.ParamsRef),
 		},
 	}
 	for _, k := range sc.TopFields {
@@ -778,8 +787,16 @@ func txShortcutSchema(sc generated.TxShortcut) *jsonschema.Schema {
 			Description: topFieldDescription(k),
 		}
 	}
+	ptypes := paramTypeMap(sc.ParamsRef)
 	for _, p := range sc.Params {
-		props[p] = &jsonschema.Schema{Type: "string"}
+		t := ptypes[p]
+		if t == "" {
+			t = "string"
+		}
+		props[p] = &jsonschema.Schema{
+			Type:        t,
+			Description: paramDescription(p),
+		}
 	}
 	return &jsonschema.Schema{
 		Type:                 "object",
@@ -988,13 +1005,13 @@ func actionDescription(resource, verb string, e generated.HelpEntry) string {
 var actionDescriptions = map[string]string{
 	"workspace.info":            "Get the active workspace's metadata",
 	"tx.list":                   "List transactions. For financial totals pass `includeEvents: true` and aggregate `_embedded.events`, not `params.amount` (call `bron_help` for the model)",
-	"tx.get":                    "Get one transaction by id. For settled amounts pass `includeEvents: true` and read `_embedded.events`, not `params.amount`",
+	"tx.get":                    "Get one transaction by id. `params.amount` is the requested amount, not the settled one — for actual settlement call `bron_tx_events` and aggregate its events (call `bron_help` for the model)",
 	"assets.prices":             "Get USD market prices for assets (filter via baseAssetIds)",
 	"symbols.prices":            "Get USD market prices for symbols",
 	"tx.approve":                "Approve a transaction (signing-required → waiting-approval → signing). State-changing — confirm with the user before invoking",
 	"tx.decline":                "Decline a transaction. Terminal. State-changing — confirm with the user. `reason` surfaces in the audit log",
 	"tx.cancel":                 "Cancel a transaction (only valid before signing). Terminal. State-changing — confirm with the user",
-	"tx.create":                 "Create a new transaction. Pass `transactionType` + `accountId` + per-type `params.*` fields, OR use a `bron_tx_<type>` shortcut. State-changing — confirm with the user",
+	"tx.create":                 "Create a new transaction. Pass `transactionType` + `accountId` + per-type `params.*` fields, OR use a `bron_tx_<type>` shortcut. Call `bron_help` with a shortcut name (e.g. `bron_tx_withdrawal`) for that type's params schema. State-changing — confirm with the user",
 	"tx.create-signing-request": "Create a signing request on an existing transaction so signers can produce signatures. State-changing — confirm with the user before invoking",
 	"tx.dry-run":                "Validate a transaction body without sending it. Use to preview fees, balance checks, etc.",
 	"tx.bulk-create":            "Create many transactions at once — pass `body` as `{ transactions: [CreateTransaction, ...] }` (the spec wraps the array under `transactions`, not a bare array). State-changing — confirm with the user before invoking",
@@ -1019,7 +1036,7 @@ func methodLabel(method string) string {
 
 func txShortcutDescription(name string, sc generated.TxShortcut) string {
 	return fmt.Sprintf(
-		"Create a `%s` transaction (CLI mirror: `bron tx %s`). Top-level fields: %s. params: %s. State-changing — confirm with the user before invoking.",
+		"Create a `%s` transaction (CLI mirror: `bron tx %s`). Top-level: %s. params: %s. Call `bron_help` with this tool's name for the full per-type params schema. State-changing — confirm with the user before invoking.",
 		name, name,
 		strings.Join(sc.TopFields, ", "),
 		strings.Join(sc.Params, ", "),
@@ -1036,6 +1053,30 @@ func topFieldDescription(name string) string {
 		return "Optional expiry — ISO 8601 or epoch millis."
 	case "externalId":
 		return "Idempotency key — unique per account; reuse on retry to avoid duplicates."
+	}
+	return ""
+}
+
+const destinationNote = "Recipient — set exactly one of toAddressBookRecordId / toAccountId / toWorkspaceTag / toAddress per request (mutually exclusive)."
+
+func paramDescription(name string) string {
+	switch name {
+	case "toAddressBookRecordId":
+		return "Saved address-book record id (preferred, validated). " + destinationNote
+	case "toAccountId":
+		return "Internal Bron account id (same-workspace transfer). " + destinationNote
+	case "toWorkspaceTag":
+		return "Destination workspace tag (route to another Bron workspace). " + destinationNote
+	case "toAddress":
+		return "Raw on-chain address (only if the workspace allowlist permits). " + destinationNote
+	case "amount":
+		return "Requested amount as an exact decimal string."
+	case "assetId":
+		return "Asset id being moved (look up via bron_assets_list / bron_symbols_list)."
+	case "networkId":
+		return "Network id (ETH, TRX, BTC, ...)."
+	case "memo":
+		return "Optional memo / destination tag (XRP, EOS, ...)."
 	}
 	return ""
 }
