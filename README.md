@@ -96,8 +96,10 @@ Examples:
   bron config use-profile production
   bron config set workspace=<workspaceId> keyFile=~/.config/bron/keys/me.jwk
 
-  bron mcp                              # stdio MCP server, foreground
+  bron mcp                              # stdio MCP server, foreground (curated default tool set)
   bron mcp --read-only                  # GET endpoints + tx dry-run only — no withdrawals/approvals
+  bron mcp --tools all                  # register every endpoint (full surface)
+  bron mcp --tools bron_tx_list,bron_balances_list   # explicit allow-list
   bron mcp install --target claude-desktop      # register `bron mcp` in Claude Desktop's mcp.json
   bron mcp install --target cursor              # ~/.cursor/mcp.json
   bron mcp install --target cline               # Cline (VS Code) globalStorage
@@ -193,6 +195,7 @@ Examples:
   bron assets list --search btc --assetType blockchain --networkIds ETH --limit 50
   bron assets get <assetId>
   bron assets prices
+  bron asset-price-series list --baseSymbolId <symbolId> --period 1d   # period: 1h|1d|1w|1m|6m|1y|all
 
   bron networks list --networkIds ETH,TRX
   bron networks get <networkId>
@@ -202,6 +205,9 @@ Examples:
 
   bron intents create --json '{"params":{...}}'
   bron intents get <intentId>
+  bron intents quote --fromAssetId <assetId> --toAssetId <assetId> --fromAmount 100
+
+  bron canton ledger-query --params '{"requestMethod":"GET","resource":"/v1/..."}'
 
   bron address-book list --networkIds ETH,TRX
   bron address-book create --name "Alice" --address <address> --networkId ETH
@@ -259,7 +265,7 @@ Special case — `bron tx <type>` (e.g. `bron tx withdrawal`, `bron tx allowance
 
 ## MCP server (`bron mcp`)
 
-`bron` doubles as a Model Context Protocol stdio server when invoked with the `mcp` subcommand — same pattern as `gh mcp` / `stripe mcp`. Every public-API endpoint the CLI knows about is exposed as a typed MCP tool (`bron_tx_list`, `bron_balances_list`, `bron_tx_withdrawal`, `bron_tx_approve`, …), plus a long-poll `bron_tx_wait_for_state` for waiting on a transaction's terminal state without polling.
+`bron` doubles as a Model Context Protocol stdio server when invoked with the `mcp` subcommand — same pattern as `gh mcp` / `stripe mcp`. By default it exposes a curated tool subset: the standard read tools (`bron_tx_list`, `bron_balances_list`, `bron_accounts_list`, …), the generic `bron_tx_create` (rather than a tool per transaction type) plus `bron_tx_withdrawal` as the one typed shortcut for the dominant send path, the write actions (`bron_tx_approve`, `bron_address_book_create`, …), a long-poll `bron_tx_wait_for_state`, and `bron_help` for discovery. Single-item lookups fold into their list tool (fetch one by passing an id filter). Pass `--tools all` to register every endpoint, or `--tools a,b,c` to pin an explicit allow-list.
 
 Auth follows the same precedence as the rest of the CLI: active profile, then env (`BRON_PROFILE`, `BRON_API_KEY` / `BRON_API_KEY_FILE`, `BRON_WORKSPACE_ID`, `BRON_BASE_URL`, `BRON_PROXY`).
 
@@ -298,6 +304,13 @@ Pass `--read-only` to register only GET endpoints + `tx dry-run`. Use this for a
 bron mcp install --target claude-code --read-only
 # or, hand-edited:
 claude mcp add bron-readonly -- bron mcp --read-only
+```
+
+Pass `--tools <list>` to pin an explicit comma-separated allow-list of tool names, or `--tools all` for the full surface. `--tools` and `--read-only` compose as an intersection:
+
+```bash
+bron mcp --tools all                                 # every endpoint
+bron mcp --tools bron_tx_list,bron_balances_list     # only these two
 ```
 
 Bron Desktop has its own built-in MCP server when installed — use that for operator-at-their-desk workflows. Use `bron mcp` for headless / CI / API-key automations where Desktop isn't running.
