@@ -68,7 +68,7 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					if err := qparam.ValidateEnum("excludedAccountTypes", q_excludedAccountTypes, []string{"vault"}, true); err != nil {
 						return err
 					}
-					if err := qparam.ValidateEnum("statuses", q_statuses, []string{"active", "archived", "shard-generating"}, true); err != nil {
+					if err := qparam.ValidateEnum("statuses", q_statuses, []string{"active", "archived", "shard-generating", "error-on-generating"}, true); err != nil {
 						return err
 					}
 					query, err := compactQuery(map[string]interface{}{
@@ -93,7 +93,7 @@ func Register(root *cobra.Command, provide ClientProvider) {
 			}
 			cmd.Flags().StringVar(&q_accountTypes, "accountTypes", "", "[array] Filter by account types (enum: vault)")
 			cmd.Flags().StringVar(&q_excludedAccountTypes, "excludedAccountTypes", "", "[array] Filter by excluded account types (enum: vault)")
-			cmd.Flags().StringVar(&q_statuses, "statuses", "", "[array] Filter by account statuses (enum: active|archived|shard-generating)")
+			cmd.Flags().StringVar(&q_statuses, "statuses", "", "[array] Filter by account statuses (enum: active|archived|shard-generating|error-on-generating)")
 			cmd.Flags().StringVar(&q_accountIds, "accountIds", "", "[string[]] Filter by account id")
 			cmd.Flags().StringVar(&q_isDefiVault, "isDefiVault", "", "[boolean] Filter only DeFi vaults")
 			cmd.Flags().StringVar(&q_offset, "offset", "", "[string<int64>] Offset for pagination")
@@ -131,10 +131,10 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					}
 					var pathParams map[string]string
 					var payload interface{}
-					if err := qparam.ValidateEnum("activityTypes", q_activityTypes, []string{"login", "new-device-login", "new-address-book-record", "update-address-book-record", "delete-address-book-record", "workspace-creation", "workspace-settings-approval-update", "workspace-name-change", "workspace-tag-change", "tag-relinked", "tag-auto-relinked", "tag-deactivated", "only-address-book-withdrawals-settings-update", "transaction-approval-settings-update", "workspace-members-approval-update", "address-book-settings-approval-update", "transaction-limits-approval-settings-update", "member-creation", "member-update", "service-member-creation", "transaction-limit-creation", "transaction-limit-update", "account-creation", "passkey-creation", "passkey-deletion", "2fa-change", "account-pins-reset", "shard-access-request-updated", "transaction-completed", "subscription-updated", "trial-prolongation-requested", "trial-prolongated", "ownership-takeover-request-created", "ownership-takeover-request-cancelled", "ownership-takeover-new-beneficiary-added", "ownership-takeover-beneficiary-left", "ownership-takeover-request-completed"}, true); err != nil {
+					if err := qparam.ValidateEnum("activityTypes", q_activityTypes, []string{"login", "new-device-login", "new-address-book-record", "update-address-book-record", "delete-address-book-record", "workspace-creation", "workspace-settings-approval-update", "workspace-name-change", "workspace-tag-change", "tag-relinked", "tag-auto-relinked", "tag-deactivated", "only-address-book-withdrawals-settings-update", "transaction-approval-settings-update", "workspace-members-approval-update", "address-book-settings-approval-update", "transaction-limits-approval-settings-update", "member-creation", "member-update", "service-member-creation", "transaction-limit-creation", "transaction-limit-update", "account-creation", "passkey-creation", "passkey-deletion", "2fa-change", "email-change", "account-pins-reset", "shard-access-request-updated", "signing-share-requested", "signing-share-in-progress", "signing-share-cancelled", "signing-share-rejected", "signing-recovery-requested", "signing-recovery-in-progress", "signing-recovery-cancelled", "signing-recovery-rejected", "signing-access-revoked", "transaction-completed", "subscription-updated", "trial-prolongation-requested", "trial-prolongated", "ownership-takeover-request-created", "ownership-takeover-request-cancelled", "ownership-takeover-new-beneficiary-added", "ownership-takeover-beneficiary-left", "ownership-takeover-request-completed"}, true); err != nil {
 						return err
 					}
-					if err := qparam.ValidateEnum("excludedActivityTypes", q_excludedActivityTypes, []string{"login", "new-device-login", "new-address-book-record", "update-address-book-record", "delete-address-book-record", "workspace-creation", "workspace-settings-approval-update", "workspace-name-change", "workspace-tag-change", "tag-relinked", "tag-auto-relinked", "tag-deactivated", "only-address-book-withdrawals-settings-update", "transaction-approval-settings-update", "workspace-members-approval-update", "address-book-settings-approval-update", "transaction-limits-approval-settings-update", "member-creation", "member-update", "service-member-creation", "transaction-limit-creation", "transaction-limit-update", "account-creation", "passkey-creation", "passkey-deletion", "2fa-change", "account-pins-reset", "shard-access-request-updated", "transaction-completed", "subscription-updated", "trial-prolongation-requested", "trial-prolongated", "ownership-takeover-request-created", "ownership-takeover-request-cancelled", "ownership-takeover-new-beneficiary-added", "ownership-takeover-beneficiary-left", "ownership-takeover-request-completed"}, true); err != nil {
+					if err := qparam.ValidateEnum("excludedActivityTypes", q_excludedActivityTypes, []string{"login", "new-device-login", "new-address-book-record", "update-address-book-record", "delete-address-book-record", "workspace-creation", "workspace-settings-approval-update", "workspace-name-change", "workspace-tag-change", "tag-relinked", "tag-auto-relinked", "tag-deactivated", "only-address-book-withdrawals-settings-update", "transaction-approval-settings-update", "workspace-members-approval-update", "address-book-settings-approval-update", "transaction-limits-approval-settings-update", "member-creation", "member-update", "service-member-creation", "transaction-limit-creation", "transaction-limit-update", "account-creation", "passkey-creation", "passkey-deletion", "2fa-change", "email-change", "account-pins-reset", "shard-access-request-updated", "signing-share-requested", "signing-share-in-progress", "signing-share-cancelled", "signing-share-rejected", "signing-recovery-requested", "signing-recovery-in-progress", "signing-recovery-cancelled", "signing-recovery-rejected", "signing-access-revoked", "transaction-completed", "subscription-updated", "trial-prolongation-requested", "trial-prolongated", "ownership-takeover-request-created", "ownership-takeover-request-cancelled", "ownership-takeover-new-beneficiary-added", "ownership-takeover-beneficiary-left", "ownership-takeover-request-completed"}, true); err != nil {
 						return err
 					}
 					query, err := compactQuery(map[string]interface{}{
@@ -161,8 +161,8 @@ func Register(root *cobra.Command, provide ClientProvider) {
 			cmd.Flags().StringVar(&q_limit, "limit", "", "[string<int64>] ")
 			cmd.Flags().StringVar(&q_search, "search", "", "[string] Search string based on activity name and description")
 			cmd.Flags().StringVar(&q_userIds, "userIds", "", "[string[]] Filter activities by user IDs")
-			cmd.Flags().StringVar(&q_activityTypes, "activityTypes", "", "[array] Filter activities by activity types (enum: login|new-device-login|new-address-book-record|update-address-book-record|delete-address-book-record|workspace-creation|workspace-settings-approval-update|workspace-name-change|workspace-tag-change|tag-relinked|tag-auto-relinked|tag-deactivated|only-address-book-withdrawals-settings-update|transaction-approval-settings-update|workspace-members-approval-update|address-book-settings-approval-update|transaction-limits-approval-settings-update|member-creation|member-update|service-member-creation|transaction-limit-creation|transaction-limit-update|account-creation|passkey-creation|passkey-deletion|2fa-change|account-pins-reset|shard-access-request-updated|transaction-completed|subscription-updated|trial-prolongation-requested|trial-prolongated|ownership-takeover-request-created|ownership-takeover-request-cancelled|ownership-takeover-new-beneficiary-added|ownership-takeover-beneficiary-left|ownership-takeover-request-completed)")
-			cmd.Flags().StringVar(&q_excludedActivityTypes, "excludedActivityTypes", "", "[array] Exclude activities by activity types (enum: login|new-device-login|new-address-book-record|update-address-book-record|delete-address-book-record|workspace-creation|workspace-settings-approval-update|workspace-name-change|workspace-tag-change|tag-relinked|tag-auto-relinked|tag-deactivated|only-address-book-withdrawals-settings-update|transaction-approval-settings-update|workspace-members-approval-update|address-book-settings-approval-update|transaction-limits-approval-settings-update|member-creation|member-update|service-member-creation|transaction-limit-creation|transaction-limit-update|account-creation|passkey-creation|passkey-deletion|2fa-change|account-pins-reset|shard-access-request-updated|transaction-completed|subscription-updated|trial-prolongation-requested|trial-prolongated|ownership-takeover-request-created|ownership-takeover-request-cancelled|ownership-takeover-new-beneficiary-added|ownership-takeover-beneficiary-left|ownership-takeover-request-completed)")
+			cmd.Flags().StringVar(&q_activityTypes, "activityTypes", "", "[array] Filter activities by activity types (enum: login|new-device-login|new-address-book-record|update-address-book-record|delete-address-book-record|workspace-creation|workspace-settings-approval-update|workspace-name-change|workspace-tag-change|tag-relinked|tag-auto-relinked|tag-deactivated|only-address-book-withdrawals-settings-update|transaction-approval-settings-update|workspace-members-approval-update|address-book-settings-approval-update|transaction-limits-approval-settings-update|member-creation|member-update|service-member-creation|transaction-limit-creation|transaction-limit-update|account-creation|passkey-creation|passkey-deletion|2fa-change|email-change|account-pins-reset|shard-access-request-updated|signing-share-requested|signing-share-in-progress|signing-share-cancelled|signing-share-rejected|signing-recovery-requested|signing-recovery-in-progress|signing-recovery-cancelled|signing-recovery-rejected|signing-access-revoked|transaction-completed|subscription-updated|trial-prolongation-requested|trial-prolongated|ownership-takeover-request-created|ownership-takeover-request-cancelled|ownership-takeover-new-beneficiary-added|ownership-takeover-beneficiary-left|ownership-takeover-request-completed)")
+			cmd.Flags().StringVar(&q_excludedActivityTypes, "excludedActivityTypes", "", "[array] Exclude activities by activity types (enum: login|new-device-login|new-address-book-record|update-address-book-record|delete-address-book-record|workspace-creation|workspace-settings-approval-update|workspace-name-change|workspace-tag-change|tag-relinked|tag-auto-relinked|tag-deactivated|only-address-book-withdrawals-settings-update|transaction-approval-settings-update|workspace-members-approval-update|address-book-settings-approval-update|transaction-limits-approval-settings-update|member-creation|member-update|service-member-creation|transaction-limit-creation|transaction-limit-update|account-creation|passkey-creation|passkey-deletion|2fa-change|email-change|account-pins-reset|shard-access-request-updated|signing-share-requested|signing-share-in-progress|signing-share-cancelled|signing-share-rejected|signing-recovery-requested|signing-recovery-in-progress|signing-recovery-cancelled|signing-recovery-rejected|signing-access-revoked|transaction-completed|subscription-updated|trial-prolongation-requested|trial-prolongated|ownership-takeover-request-created|ownership-takeover-request-cancelled|ownership-takeover-new-beneficiary-added|ownership-takeover-beneficiary-left|ownership-takeover-request-completed)")
 			res.AddCommand(cmd)
 		}
 		for _, c := range res.Commands() {
@@ -180,6 +180,27 @@ func Register(root *cobra.Command, provide ClientProvider) {
 		{
 			var f_accountIds string
 			var f_address string
+			var f_bankDetails_accountHolderType string
+			var f_bankDetails_accountNumber string
+			var f_bankDetails_accountType string
+			var f_bankDetails_bankAddress_address string
+			var f_bankDetails_bankAddress_city string
+			var f_bankDetails_bankAddress_country string
+			var f_bankDetails_bankAddress_postalCode string
+			var f_bankDetails_bankAddress_state string
+			var f_bankDetails_bankCode string
+			var f_bankDetails_businessName string
+			var f_bankDetails_businessRegistrationNumber string
+			var f_bankDetails_channelType string
+			var f_bankDetails_correspondentBankCode string
+			var f_bankDetails_country string
+			var f_bankDetails_fiatCurrency string
+			var f_bankDetails_firstName string
+			var f_bankDetails_issuer string
+			var f_bankDetails_lastName string
+			var f_bankDetails_paymentPurpose string
+			var f_bankDetails_reference string
+			var f_bankDetails_registeredAddress string
 			var f_externalId string
 			var f_imageId string
 			var f_memo string
@@ -203,15 +224,36 @@ func Register(root *cobra.Command, provide ClientProvider) {
 						return err
 					}
 					fields := map[string]string{
-						"accountIds": f_accountIds,
-						"address":    f_address,
-						"externalId": f_externalId,
-						"imageId":    f_imageId,
-						"memo":       f_memo,
-						"name":       f_name,
-						"networkId":  f_networkId,
-						"recordType": f_recordType,
-						"tag":        f_tag,
+						"accountIds":                             f_accountIds,
+						"address":                                f_address,
+						"bankDetails.accountHolderType":          f_bankDetails_accountHolderType,
+						"bankDetails.accountNumber":              f_bankDetails_accountNumber,
+						"bankDetails.accountType":                f_bankDetails_accountType,
+						"bankDetails.bankAddress.address":        f_bankDetails_bankAddress_address,
+						"bankDetails.bankAddress.city":           f_bankDetails_bankAddress_city,
+						"bankDetails.bankAddress.country":        f_bankDetails_bankAddress_country,
+						"bankDetails.bankAddress.postalCode":     f_bankDetails_bankAddress_postalCode,
+						"bankDetails.bankAddress.state":          f_bankDetails_bankAddress_state,
+						"bankDetails.bankCode":                   f_bankDetails_bankCode,
+						"bankDetails.businessName":               f_bankDetails_businessName,
+						"bankDetails.businessRegistrationNumber": f_bankDetails_businessRegistrationNumber,
+						"bankDetails.channelType":                f_bankDetails_channelType,
+						"bankDetails.correspondentBankCode":      f_bankDetails_correspondentBankCode,
+						"bankDetails.country":                    f_bankDetails_country,
+						"bankDetails.fiatCurrency":               f_bankDetails_fiatCurrency,
+						"bankDetails.firstName":                  f_bankDetails_firstName,
+						"bankDetails.issuer":                     f_bankDetails_issuer,
+						"bankDetails.lastName":                   f_bankDetails_lastName,
+						"bankDetails.paymentPurpose":             f_bankDetails_paymentPurpose,
+						"bankDetails.reference":                  f_bankDetails_reference,
+						"bankDetails.registeredAddress":          f_bankDetails_registeredAddress,
+						"externalId":                             f_externalId,
+						"imageId":                                f_imageId,
+						"memo":                                   f_memo,
+						"name":                                   f_name,
+						"networkId":                              f_networkId,
+						"recordType":                             f_recordType,
+						"tag":                                    f_tag,
 					}
 					payload, err := body.Compose(baseline, fields)
 					if err != nil {
@@ -230,6 +272,27 @@ func Register(root *cobra.Command, provide ClientProvider) {
 			}
 			cmd.Flags().StringVar(&f_accountIds, "accountIds", "", "[string[]] Comma-separated account ids, if address set for particular accounts")
 			cmd.Flags().StringVar(&f_address, "address", "", "[string] Address")
+			cmd.Flags().StringVar(&f_bankDetails_accountHolderType, "bankDetails.accountHolderType", "", "[string] Account holder type (enum: individual|business)")
+			cmd.Flags().StringVar(&f_bankDetails_accountNumber, "bankDetails.accountNumber", "", "[string] Account number / IBAN")
+			cmd.Flags().StringVar(&f_bankDetails_accountType, "bankDetails.accountType", "", "[string] Account type — required by Noah for ACH and international SWIFT (USD-style) (enum: checking|savings)")
+			cmd.Flags().StringVar(&f_bankDetails_bankAddress_address, "bankDetails.bankAddress.address", "", "[string] Street address, line 1")
+			cmd.Flags().StringVar(&f_bankDetails_bankAddress_city, "bankDetails.bankAddress.city", "", "[string] City")
+			cmd.Flags().StringVar(&f_bankDetails_bankAddress_country, "bankDetails.bankAddress.country", "", "[string] ISO-3166-1 alpha-2 country code; defaults to BankDetails.country when omitted")
+			cmd.Flags().StringVar(&f_bankDetails_bankAddress_postalCode, "bankDetails.bankAddress.postalCode", "", "[string] Postal / ZIP code")
+			cmd.Flags().StringVar(&f_bankDetails_bankAddress_state, "bankDetails.bankAddress.state", "", "[string] State / province")
+			cmd.Flags().StringVar(&f_bankDetails_bankCode, "bankDetails.bankCode", "", "[string] Bank code: BIC (SWIFT) / 9-digit routing number (US ACH) / sort code (UK)")
+			cmd.Flags().StringVar(&f_bankDetails_businessName, "bankDetails.businessName", "", "[string] Business name (for Business holder)")
+			cmd.Flags().StringVar(&f_bankDetails_businessRegistrationNumber, "bankDetails.businessRegistrationNumber", "", "[string] Company registration number (for Business holder)")
+			cmd.Flags().StringVar(&f_bankDetails_channelType, "bankDetails.channelType", "", "[string] Payment channel type (enum: sepa|ach|swift|fedwire|local)")
+			cmd.Flags().StringVar(&f_bankDetails_correspondentBankCode, "bankDetails.correspondentBankCode", "", "[string] Correspondent bank SWIFT/BIC code for international SWIFT payments")
+			cmd.Flags().StringVar(&f_bankDetails_country, "bankDetails.country", "", "[string] ISO-3166-1 alpha-2 country code, or 'XX' for global SWIFT-like fallback")
+			cmd.Flags().StringVar(&f_bankDetails_fiatCurrency, "bankDetails.fiatCurrency", "", "[string] Fiat currency code (ISO-4217)")
+			cmd.Flags().StringVar(&f_bankDetails_firstName, "bankDetails.firstName", "", "[string] First name (for Individual holder)")
+			cmd.Flags().StringVar(&f_bankDetails_issuer, "bankDetails.issuer", "", "[string] Bank name and address — free-form text shown to the user as a single block")
+			cmd.Flags().StringVar(&f_bankDetails_lastName, "bankDetails.lastName", "", "[string] Last name (for Individual holder)")
+			cmd.Flags().StringVar(&f_bankDetails_paymentPurpose, "bankDetails.paymentPurpose", "", "[string] Payment purpose — required by Noah for ACH/Fedwire/SWIFT-EUR")
+			cmd.Flags().StringVar(&f_bankDetails_reference, "bankDetails.reference", "", "[string] Reference shown on the beneficiary's bank statement")
+			cmd.Flags().StringVar(&f_bankDetails_registeredAddress, "bankDetails.registeredAddress", "", "[string] Registered address (for Business holder)")
 			cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Address book entry external ID")
 			cmd.Flags().StringVar(&f_imageId, "imageId", "", "[string] Workspace image ID (for tag type records)")
 			cmd.Flags().StringVar(&f_memo, "memo", "", "[string] Address memo (destination tag for XRP)")
@@ -352,6 +415,52 @@ func Register(root *cobra.Command, provide ClientProvider) {
 			cmd.Flags().StringVar(&q_recordType, "recordType", "", "[string] Filter by record type (enum: address|tag|bank)")
 			cmd.Flags().StringVar(&q_recordTypes, "recordTypes", "", "[array] Filter by record types (enum: address|tag|bank)")
 			cmd.Flags().StringVar(&q_statuses, "statuses", "", "[array] Filter by statuses (enum: new|active|rejected|deleted)")
+			res.AddCommand(cmd)
+		}
+		for _, c := range res.Commands() {
+			if c.Name() == "list" {
+				res.RunE = c.RunE
+				res.Args = c.Args
+				res.Flags().AddFlagSet(c.Flags())
+				break
+			}
+		}
+		root.AddCommand(res)
+	}
+	{
+		res := &cobra.Command{Use: "asset-price-series", Short: "list — asset-price-series", GroupID: "api"}
+		{
+			var q_baseSymbolId string
+			var q_period string
+			cmd := &cobra.Command{
+				Use:   "list",
+				Short: "Get Asset Price Series",
+				RunE: func(cmd *cobra.Command, args []string) error {
+					cli, err := provide()
+					if err != nil {
+						return err
+					}
+					var pathParams map[string]string
+					var payload interface{}
+					if err := qparam.ValidateEnum("period", q_period, []string{"1h", "1d", "1w", "1m", "6m", "1y", "all"}, false); err != nil {
+						return err
+					}
+					query, err := compactQuery(map[string]interface{}{
+						"baseSymbolId": q_baseSymbolId,
+						"period":       q_period,
+					})
+					if err != nil {
+						return err
+					}
+					var result interface{}
+					if err := cli.Do(cmd.Context(), "GET", "/dictionary/asset-price-series", pathParams, payload, query, &result); err != nil {
+						return err
+					}
+					return output.Print(result)
+				},
+			}
+			cmd.Flags().StringVar(&q_baseSymbolId, "baseSymbolId", "", "[string] The base symbol ID to get the price chart for (required)")
+			cmd.Flags().StringVar(&q_period, "period", "", "[string] Chart period (1h, 1d, 1w, 1m, 1y, all) (enum: 1h|1d|1w|1m|6m|1y|all) (required)")
 			res.AddCommand(cmd)
 		}
 		for _, c := range res.Commands() {
@@ -627,6 +736,60 @@ func Register(root *cobra.Command, provide ClientProvider) {
 		root.AddCommand(res)
 	}
 	{
+		res := &cobra.Command{Use: "canton", Short: "ledger-query — canton", GroupID: "api"}
+		{
+			var f_accountId string
+			var f_params string
+			var f_sessionTopic string
+			var fileFlag string
+			var jsonFlag string
+			cmd := &cobra.Command{
+				Use:   "ledger-query",
+				Short: "Canton Ledger API passthrough",
+				RunE: func(cmd *cobra.Command, args []string) error {
+					cli, err := provide()
+					if err != nil {
+						return err
+					}
+					var pathParams map[string]string
+					baseline, err := body.Parse(fileFlag, jsonFlag)
+					if err != nil {
+						return err
+					}
+					fields := map[string]string{
+						"accountId":    f_accountId,
+						"params":       f_params,
+						"sessionTopic": f_sessionTopic,
+					}
+					payload, err := body.Compose(baseline, fields)
+					if err != nil {
+						return err
+					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
+						return err
+					}
+					var query interface{}
+					var result interface{}
+					if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/canton/ledger-query", pathParams, payload, query, &result); err != nil {
+						return err
+					}
+					return output.Print(result)
+				},
+			}
+			cmd.Flags().StringVar(&f_accountId, "accountId", "", "[string] Account whose Canton party identifiers are used as the calling parties for the forwarded request.")
+			cmd.Flags().StringVar(&f_params, "params", "", "[com.fasterxml.jackson.databind.JsonNode] Canton Ledger JSON API request envelope; mirrors the @canton-network/dapp-sdk LedgerApiParams shape ({ requestMethod, resource, body?, query?, path? }). This route forwards a whitelisted set of read-only requests on behalf of a wallet connected via WalletConnect.")
+			cmd.Flags().StringVar(&f_sessionTopic, "sessionTopic", "", "[string] WalletConnect session topic for audit correlation.")
+			cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
+			cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
+			cmd.MarkFlagsMutuallyExclusive("file", "json")
+			res.AddCommand(cmd)
+		}
+		res.RunE = func(cmd *cobra.Command, args []string) error {
+			return fmt.Errorf("specify an action: canton (available: ledger-query)")
+		}
+		root.AddCommand(res)
+	}
+	{
 		res := &cobra.Command{Use: "deposit-addresses", Short: "list — deposit-addresses", GroupID: "api"}
 		{
 			var q_accountId string
@@ -703,7 +866,7 @@ func Register(root *cobra.Command, provide ClientProvider) {
 		root.AddCommand(res)
 	}
 	{
-		res := &cobra.Command{Use: "intents", Short: "create, get — intents", GroupID: "api"}
+		res := &cobra.Command{Use: "intents", Short: "create, get, quote — intents", GroupID: "api"}
 		{
 			var f_accountId string
 			var f_fromAmount string
@@ -784,8 +947,45 @@ func Register(root *cobra.Command, provide ClientProvider) {
 			}
 			res.AddCommand(cmd)
 		}
+		{
+			var q_fromAssetId string
+			var q_toAssetId string
+			var q_fromAmount string
+			var q_toAmount string
+			cmd := &cobra.Command{
+				Use:   "quote",
+				Short: "Request indicative swap quote",
+				RunE: func(cmd *cobra.Command, args []string) error {
+					cli, err := provide()
+					if err != nil {
+						return err
+					}
+					var pathParams map[string]string
+					var payload interface{}
+					query, err := compactQuery(map[string]interface{}{
+						"fromAssetId": q_fromAssetId,
+						"toAssetId":   q_toAssetId,
+						"fromAmount":  q_fromAmount,
+						"toAmount":    q_toAmount,
+					})
+					if err != nil {
+						return err
+					}
+					var result interface{}
+					if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/intents/quote", pathParams, payload, query, &result); err != nil {
+						return err
+					}
+					return output.Print(result)
+				},
+			}
+			cmd.Flags().StringVar(&q_fromAssetId, "fromAssetId", "", "[string] ID of the source asset (required)")
+			cmd.Flags().StringVar(&q_toAssetId, "toAssetId", "", "[string] ID of the destination asset (required)")
+			cmd.Flags().StringVar(&q_fromAmount, "fromAmount", "", "[string<decimal>] Amount of the from-asset. Exactly one of `fromAmount` or `toAmount` must be specified.")
+			cmd.Flags().StringVar(&q_toAmount, "toAmount", "", "[string<decimal>] Amount of the to-asset. Exactly one of `fromAmount` or `toAmount` must be specified.")
+			res.AddCommand(cmd)
+		}
 		res.RunE = func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("specify an action: intents (available: create, get)")
+			return fmt.Errorf("specify an action: intents (available: create, get, quote)")
 		}
 		root.AddCommand(res)
 	}
@@ -1092,12 +1292,12 @@ func Register(root *cobra.Command, provide ClientProvider) {
 			res.AddCommand(cmd)
 		}
 		{
+			var q_limitIds string
 			var q_statuses string
 			var q_fromAccountIds string
 			var q_toAddressBookRecordIds string
 			var q_toAccountIds string
 			var q_appliesToUserIds string
-			var q_appliesToGroupIds string
 			var q_limit string
 			var q_offset string
 			cmd := &cobra.Command{
@@ -1114,12 +1314,12 @@ func Register(root *cobra.Command, provide ClientProvider) {
 						return err
 					}
 					query, err := compactQuery(map[string]interface{}{
+						"limitIds":               q_limitIds,
 						"statuses":               q_statuses,
 						"fromAccountIds":         q_fromAccountIds,
 						"toAddressBookRecordIds": q_toAddressBookRecordIds,
 						"toAccountIds":           q_toAccountIds,
 						"appliesToUserIds":       q_appliesToUserIds,
-						"appliesToGroupIds":      q_appliesToGroupIds,
 						"limit":                  q_limit,
 						"offset":                 q_offset,
 					})
@@ -1133,12 +1333,12 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					return output.Print(result)
 				},
 			}
+			cmd.Flags().StringVar(&q_limitIds, "limitIds", "", "[string[]] ")
 			cmd.Flags().StringVar(&q_statuses, "statuses", "", "[array] (enum: new|active|deactivated|declined)")
 			cmd.Flags().StringVar(&q_fromAccountIds, "fromAccountIds", "", "[string[]] ")
 			cmd.Flags().StringVar(&q_toAddressBookRecordIds, "toAddressBookRecordIds", "", "[string[]] ")
 			cmd.Flags().StringVar(&q_toAccountIds, "toAccountIds", "", "[string[]] ")
 			cmd.Flags().StringVar(&q_appliesToUserIds, "appliesToUserIds", "", "[string[]] ")
-			cmd.Flags().StringVar(&q_appliesToGroupIds, "appliesToGroupIds", "", "[string[]] ")
 			cmd.Flags().StringVar(&q_limit, "limit", "", "[string<int64>] ")
 			cmd.Flags().StringVar(&q_offset, "offset", "", "[string<int64>] ")
 			res.AddCommand(cmd)
@@ -1378,6 +1578,9 @@ func Register(root *cobra.Command, provide ClientProvider) {
 			res.AddCommand(cmd)
 		}
 		{
+			var f_primitivesVersion string
+			var fileFlag string
+			var jsonFlag string
 			cmd := &cobra.Command{
 				Use:   "create-signing-request <transactionId>",
 				Short: "Create signing request",
@@ -1390,7 +1593,20 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					pathParams := map[string]string{
 						"transactionId": args[0],
 					}
-					var payload interface{}
+					baseline, err := body.Parse(fileFlag, jsonFlag)
+					if err != nil {
+						return err
+					}
+					fields := map[string]string{
+						"primitivesVersion": f_primitivesVersion,
+					}
+					payload, err := body.Compose(baseline, fields)
+					if err != nil {
+						return err
+					}
+					if err := qparam.CoerceBodyDates(payload); err != nil {
+						return err
+					}
 					var query interface{}
 					var result interface{}
 					if err := cli.Do(cmd.Context(), "POST", "/workspaces/{workspaceId}/transactions/{transactionId}/create-signing-request", pathParams, payload, query, &result); err != nil {
@@ -1399,6 +1615,10 @@ func Register(root *cobra.Command, provide ClientProvider) {
 					return output.Print(result)
 				},
 			}
+			cmd.Flags().StringVar(&f_primitivesVersion, "primitivesVersion", "", "[string<int32>] Version of the primitives used for signing.")
+			cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
+			cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
+			cmd.MarkFlagsMutuallyExclusive("file", "json")
 			res.AddCommand(cmd)
 		}
 		{
@@ -1974,7 +2194,6 @@ func Register(root *cobra.Command, provide ClientProvider) {
 			var p_method string
 			var p_networkId string
 			var p_origin string
-			var p_rawTransaction string
 			var p_rawTransactions string
 			var p_to string
 			var p_value string
@@ -2004,7 +2223,6 @@ func Register(root *cobra.Command, provide ClientProvider) {
 						"params.method":            p_method,
 						"params.networkId":         p_networkId,
 						"params.origin":            p_origin,
-						"params.rawTransaction":    p_rawTransaction,
 						"params.rawTransactions":   p_rawTransactions,
 						"params.to":                p_to,
 						"params.value":             p_value,
@@ -2035,8 +2253,7 @@ func Register(root *cobra.Command, provide ClientProvider) {
 			cmd.Flags().StringVar(&p_method, "params.method", "", "[string] WalletConnect method name that defines the requested operation (e.g. eth_sendTransaction, solana_signTransaction)")
 			cmd.Flags().StringVar(&p_networkId, "params.networkId", "", "[string] ")
 			cmd.Flags().StringVar(&p_origin, "params.origin", "", "[string] Origin of defi operation")
-			cmd.Flags().StringVar(&p_rawTransaction, "params.rawTransaction", "", "[string] Fully formed serialized transaction to be signed or broadcast (used for TON network)")
-			cmd.Flags().StringVar(&p_rawTransactions, "params.rawTransactions", "", "[string[]] List of fully formed serialized transactions to be signed or broadcast (used for Solana network)")
+			cmd.Flags().StringVar(&p_rawTransactions, "params.rawTransactions", "", "[string[]] List of fully formed serialized transactions to be signed or broadcast (used for Solana, TON networks)")
 			cmd.Flags().StringVar(&p_to, "params.to", "", "[string] Recipient address for EVM-compatible transaction")
 			cmd.Flags().StringVar(&p_value, "params.value", "", "[string] Hex-encoded amount (EVM networks)")
 			cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
@@ -2174,7 +2391,6 @@ func Register(root *cobra.Command, provide ClientProvider) {
 			var f_externalId string
 			var p_amount string
 			var p_assetId string
-			var p_fiatAmount string
 			var p_fiatAssetId string
 			var fileFlag string
 			var jsonFlag string
@@ -2198,7 +2414,6 @@ func Register(root *cobra.Command, provide ClientProvider) {
 						"externalId":         f_externalId,
 						"params.amount":      p_amount,
 						"params.assetId":     p_assetId,
-						"params.fiatAmount":  p_fiatAmount,
 						"params.fiatAssetId": p_fiatAssetId,
 					}
 					payload, err := body.Compose(baseline, fields)
@@ -2223,7 +2438,6 @@ func Register(root *cobra.Command, provide ClientProvider) {
 			cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
 			cmd.Flags().StringVar(&p_amount, "params.amount", "", "[string<decimal>] Amount to deposit")
 			cmd.Flags().StringVar(&p_assetId, "params.assetId", "", "[string] Target crypto asset to receive")
-			cmd.Flags().StringVar(&p_fiatAmount, "params.fiatAmount", "", "[string<decimal>] Fiat amount to pay")
 			cmd.Flags().StringVar(&p_fiatAssetId, "params.fiatAssetId", "", "[string] Source fiat asset")
 			cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
 			cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
@@ -2239,7 +2453,6 @@ func Register(root *cobra.Command, provide ClientProvider) {
 			var p_assetId string
 			var p_feeLevel string
 			var p_fiatAssetId string
-			var p_networkId string
 			var p_toAddressBookRecordId string
 			var fileFlag string
 			var jsonFlag string
@@ -2265,7 +2478,6 @@ func Register(root *cobra.Command, provide ClientProvider) {
 						"params.assetId":               p_assetId,
 						"params.feeLevel":              p_feeLevel,
 						"params.fiatAssetId":           p_fiatAssetId,
-						"params.networkId":             p_networkId,
 						"params.toAddressBookRecordId": p_toAddressBookRecordId,
 					}
 					payload, err := body.Compose(baseline, fields)
@@ -2292,7 +2504,6 @@ func Register(root *cobra.Command, provide ClientProvider) {
 			cmd.Flags().StringVar(&p_assetId, "params.assetId", "", "[string] Crypto asset to sell")
 			cmd.Flags().StringVar(&p_feeLevel, "params.feeLevel", "", "[string] (enum: low|medium|high)")
 			cmd.Flags().StringVar(&p_fiatAssetId, "params.fiatAssetId", "", "[string] Target fiat asset")
-			cmd.Flags().StringVar(&p_networkId, "params.networkId", "", "[string] Network to send crypto from")
 			cmd.Flags().StringVar(&p_toAddressBookRecordId, "params.toAddressBookRecordId", "", "[string] Bank account record ID from address book")
 			cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
 			cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
@@ -2963,7 +3174,6 @@ func Register(root *cobra.Command, provide ClientProvider) {
 				var p_method string
 				var p_networkId string
 				var p_origin string
-				var p_rawTransaction string
 				var p_rawTransactions string
 				var p_to string
 				var p_value string
@@ -2993,7 +3203,6 @@ func Register(root *cobra.Command, provide ClientProvider) {
 							"params.method":            p_method,
 							"params.networkId":         p_networkId,
 							"params.origin":            p_origin,
-							"params.rawTransaction":    p_rawTransaction,
 							"params.rawTransactions":   p_rawTransactions,
 							"params.to":                p_to,
 							"params.value":             p_value,
@@ -3024,8 +3233,7 @@ func Register(root *cobra.Command, provide ClientProvider) {
 				cmd.Flags().StringVar(&p_method, "params.method", "", "[string] WalletConnect method name that defines the requested operation (e.g. eth_sendTransaction, solana_signTransaction)")
 				cmd.Flags().StringVar(&p_networkId, "params.networkId", "", "[string] ")
 				cmd.Flags().StringVar(&p_origin, "params.origin", "", "[string] Origin of defi operation")
-				cmd.Flags().StringVar(&p_rawTransaction, "params.rawTransaction", "", "[string] Fully formed serialized transaction to be signed or broadcast (used for TON network)")
-				cmd.Flags().StringVar(&p_rawTransactions, "params.rawTransactions", "", "[string[]] List of fully formed serialized transactions to be signed or broadcast (used for Solana network)")
+				cmd.Flags().StringVar(&p_rawTransactions, "params.rawTransactions", "", "[string[]] List of fully formed serialized transactions to be signed or broadcast (used for Solana, TON networks)")
 				cmd.Flags().StringVar(&p_to, "params.to", "", "[string] Recipient address for EVM-compatible transaction")
 				cmd.Flags().StringVar(&p_value, "params.value", "", "[string] Hex-encoded amount (EVM networks)")
 				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
@@ -3163,7 +3371,6 @@ func Register(root *cobra.Command, provide ClientProvider) {
 				var f_externalId string
 				var p_amount string
 				var p_assetId string
-				var p_fiatAmount string
 				var p_fiatAssetId string
 				var fileFlag string
 				var jsonFlag string
@@ -3187,7 +3394,6 @@ func Register(root *cobra.Command, provide ClientProvider) {
 							"externalId":         f_externalId,
 							"params.amount":      p_amount,
 							"params.assetId":     p_assetId,
-							"params.fiatAmount":  p_fiatAmount,
 							"params.fiatAssetId": p_fiatAssetId,
 						}
 						payload, err := body.Compose(baseline, fields)
@@ -3212,7 +3418,6 @@ func Register(root *cobra.Command, provide ClientProvider) {
 				cmd.Flags().StringVar(&f_externalId, "externalId", "", "[string] Unique transaction identifier from client (should be unique per the account)")
 				cmd.Flags().StringVar(&p_amount, "params.amount", "", "[string<decimal>] Amount to deposit")
 				cmd.Flags().StringVar(&p_assetId, "params.assetId", "", "[string] Target crypto asset to receive")
-				cmd.Flags().StringVar(&p_fiatAmount, "params.fiatAmount", "", "[string<decimal>] Fiat amount to pay")
 				cmd.Flags().StringVar(&p_fiatAssetId, "params.fiatAssetId", "", "[string] Source fiat asset")
 				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
 				cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
@@ -3228,7 +3433,6 @@ func Register(root *cobra.Command, provide ClientProvider) {
 				var p_assetId string
 				var p_feeLevel string
 				var p_fiatAssetId string
-				var p_networkId string
 				var p_toAddressBookRecordId string
 				var fileFlag string
 				var jsonFlag string
@@ -3254,7 +3458,6 @@ func Register(root *cobra.Command, provide ClientProvider) {
 							"params.assetId":               p_assetId,
 							"params.feeLevel":              p_feeLevel,
 							"params.fiatAssetId":           p_fiatAssetId,
-							"params.networkId":             p_networkId,
 							"params.toAddressBookRecordId": p_toAddressBookRecordId,
 						}
 						payload, err := body.Compose(baseline, fields)
@@ -3281,7 +3484,6 @@ func Register(root *cobra.Command, provide ClientProvider) {
 				cmd.Flags().StringVar(&p_assetId, "params.assetId", "", "[string] Crypto asset to sell")
 				cmd.Flags().StringVar(&p_feeLevel, "params.feeLevel", "", "[string] (enum: low|medium|high)")
 				cmd.Flags().StringVar(&p_fiatAssetId, "params.fiatAssetId", "", "[string] Target fiat asset")
-				cmd.Flags().StringVar(&p_networkId, "params.networkId", "", "[string] Network to send crypto from")
 				cmd.Flags().StringVar(&p_toAddressBookRecordId, "params.toAddressBookRecordId", "", "[string] Bank account record ID from address book")
 				cmd.Flags().StringVar(&fileFlag, "file", "", "read request body from file path ('-' for stdin)")
 				cmd.Flags().StringVar(&jsonFlag, "json", "", "inline request body as a JSON string")
