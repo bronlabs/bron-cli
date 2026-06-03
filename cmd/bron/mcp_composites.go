@@ -33,8 +33,10 @@ const (
 	waitForStateMaxSec     = 60
 )
 
-func registerClientComposites(server *mcp.Server, _ *client.Client, sdkClient *sdk.BronClient) {
-	registerTxWaitForState(server, sdkClient)
+func registerClientComposites(server *mcp.Server, _ *client.Client, sdkClient *sdk.BronClient, opts mcpOptions) {
+	if opts.allows("bron_tx_wait_for_state") {
+		registerTxWaitForState(server, sdkClient)
+	}
 }
 
 // --- bron_tx_wait_for_state --------------------------------------------------

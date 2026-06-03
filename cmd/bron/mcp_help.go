@@ -116,9 +116,13 @@ func helpToolSchema() *jsonschema.Schema {
 	}
 }
 
-// registerHelpTool wires bron_help. Always registered (read-only safe) so the
-// discovery path exists in every mode, including `--read-only`.
-func registerHelpTool(server *mcp.Server) {
+// registerHelpTool wires bron_help. Read-only safe, so it's available in every
+// mode including `--read-only`; only an explicit `--tools` list that omits it
+// (or a custom whitelist) keeps it out.
+func registerHelpTool(server *mcp.Server, opts mcpOptions) {
+	if !opts.allows(helpToolName) {
+		return
+	}
 	tool := &mcp.Tool{
 		Name: helpToolName,
 		Description: "Discovery: the Bron data model, a tool's response shape, and jq recipes. " +

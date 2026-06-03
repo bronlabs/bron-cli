@@ -58,11 +58,17 @@ func bronServerIcons() []mcp.Icon {
 //
 // All tool registration is driven by `generated.HelpEntries` /
 // `generated.TxShortcuts` so MCP and CLI track the same OpenAPI spec — every
-// resource/verb the CLI exposes is also reachable as `bron_<resource>_<verb>`,
-// every `bron tx <type>` shortcut is also `bron_tx_<type>`. No hand-written
+// resource/verb the CLI exposes is reachable as `bron_<resource>_<verb>`, and
+// every `bron tx <type>` shortcut as `bron_tx_<type>`. No hand-written
 // per-endpoint code.
+//
+// The registered surface is then narrowed by the `--tools` allow-list
+// (default: `defaultMCPTools`), so the out-of-the-box server exposes a curated
+// subset — notably `bron_tx_create` for the generic create path instead of all
+// 15 per-type creators. `--tools all` registers everything.
 func newMCPCmd(gf *globalFlags) *cobra.Command {
 	var readOnly bool
+	var toolList []string
 	cmd := &cobra.Command{
 		Use:   "mcp",
 		Short: "Run a Model Context Protocol (MCP) server exposing Bron API tools",
@@ -103,10 +109,17 @@ automations where Desktop isn't running.
 
 Pass ` + "`--read-only`" + ` to register only GET endpoints + ` + "`tx dry-run`" + `. Useful for
 agents that should observe a workspace without being able to move funds (CI
-runs, audit pipelines, untrusted prompt sources).`,
-		Example: `  bron mcp                              # stdio server, foreground
-  bron mcp --read-only                  # GET endpoints + tx dry-run only (no withdrawals)
-  claude mcp add bron -- bron mcp       # register with Claude Code
+runs, audit pipelines, untrusted prompt sources).
+
+By default the server registers a curated tool subset (the generic
+` + "`bron_tx_create`" + ` rather than all 15 per-type creators, etc.). Pass
+` + "`--tools a,b,c`" + ` to register an explicit allow-list, or ` + "`--tools all`" + ` for the
+full surface. ` + "`--tools`" + ` and ` + "`--read-only`" + ` compose as an intersection.`,
+		Example: `  bron mcp                                       # stdio server, curated tool set
+  bron mcp --read-only                           # GET endpoints + tx dry-run only (no writes)
+  bron mcp --tools all                           # register every tool
+  bron mcp --tools bron_tx_list,bron_balances_list   # only these two
+  claude mcp add bron -- bron mcp                # register with Claude Code
   echo '{"mcpServers":{"bron":{"command":"bron","args":["mcp"]}}}' > .cursor/mcp.json`,
 		RunE: func(c *cobra.Command, args []string) error {
 			cli, err := buildClient(gf)
@@ -128,7 +141,10 @@ runs, audit pipelines, untrusted prompt sources).`,
 				Instructions: bronServerInstructions,
 			})
 
-			registerTools(server, cli, sdkClient, mcpOptions{readOnly: readOnly})
+			registerTools(server, cli, sdkClient, mcpOptions{
+				readOnly: readOnly,
+				tools:    resolveToolWhitelist(toolList),
+			})
 
 			ctx, cancel := signal.NotifyContext(c.Context(), os.Interrupt, syscall.SIGTERM)
 			defer cancel()
@@ -138,6 +154,8 @@ runs, audit pipelines, untrusted prompt sources).`,
 	}
 	cmd.Flags().BoolVar(&readOnly, "read-only", false,
 		"register only read-safe tools: GET endpoints plus tx dry-run. State-changing tools (withdraw, approve, decline, cancel, address-book create/delete, …) are skipped.")
+	cmd.Flags().StringSliceVar(&toolList, "tools", nil,
+		"comma-separated allow-list of tool names to register (e.g. bron_tx_list,bron_balances_list). Defaults to a curated set; pass `all` to register every tool. Composes with --read-only (intersection).")
 	cmd.AddCommand(newMCPInstallCmd())
 	return cmd
 }
@@ -146,6 +164,100 @@ runs, audit pipelines, untrusted prompt sources).`,
 // fields here shouldn't break callers — just check them in registerTools.
 type mcpOptions struct {
 	readOnly bool
+
+	// tools is the resolved allow-list of tool names to register. nil means
+	// "no filtering — register everything"; an empty/non-nil set registers
+	// nothing. Built from the `--tools` flag (or `defaultMCPTools` when the
+	// flag is absent) by resolveToolWhitelist.
+	tools map[string]bool
+}
+
+// blockedMCPTools is the internal blocklist: tools never exposed over MCP
+// regardless of `--tools` (including `--tools all`). `create-signing-request`
+// drives MPC signing internals and has no place in an agent-facing surface.
+var blockedMCPTools = map[string]bool{
+	"bron_tx_create_signing_request": true,
+}
+
+// allows reports whether a tool name should be registered. The blocklist wins
+// over everything; otherwise a nil whitelist (the `--tools all` escape hatch)
+// lets everything through and a non-nil one gates by membership.
+func (o mcpOptions) allows(name string) bool {
+	if blockedMCPTools[name] {
+		return false
+	}
+	if o.tools == nil {
+		return true
+	}
+	return o.tools[name]
+}
+
+// defaultMCPTools is the curated tool surface registered when `--tools` is not
+// passed. Two deliberate reductions vs the full spec-driven surface:
+//   - per-type `bron_tx_<type>` creators are dropped in favour of the generic
+//     `bron_tx_create` (params discoverable via `bron_help`); `bron_tx_withdrawal`
+//     is the one exception, kept as a typed shortcut for the dominant send path.
+//   - single-item `_get` tools are dropped where the matching `_list` can fetch
+//     the same entity by an id filter (accounts→accountIds, tx→transactionId, …).
+//     `bron_intents_get` survives only because intents has no `_list`.
+//
+// `--tools all` registers everything; edit this list to change the default.
+var defaultMCPTools = []string{
+	"bron_help",
+	"bron_workspace_info",
+
+	"bron_accounts_list",
+	"bron_activities_list",
+	"bron_address_book_list",
+	"bron_assets_list",
+	"bron_assets_prices",
+	"bron_balances_list",
+	"bron_deposit_addresses_list",
+	"bron_intents_get",
+	"bron_members_list",
+	"bron_networks_list",
+	"bron_stakes_list",
+	"bron_symbols_list",
+	"bron_symbols_prices",
+	"bron_transaction_limits_list",
+	"bron_tx_list",
+	"bron_tx_events",
+
+	"bron_tx_create",
+	"bron_tx_withdrawal",
+	"bron_tx_dry_run",
+	"bron_tx_bulk_create",
+	"bron_tx_approve",
+	"bron_tx_decline",
+	"bron_tx_cancel",
+	"bron_tx_accept_deposit_offer",
+	"bron_tx_reject_outgoing_offer",
+	"bron_address_book_create",
+	"bron_address_book_delete",
+	"bron_intents_create",
+
+	"bron_tx_wait_for_state",
+}
+
+// resolveToolWhitelist turns the `--tools` flag value into an allow-list set.
+// Empty flag → defaultMCPTools. A literal "all" / "*" anywhere disables
+// filtering (returns nil). Otherwise the names become the registered surface.
+func resolveToolWhitelist(flag []string) map[string]bool {
+	names := flag
+	if len(names) == 0 {
+		names = defaultMCPTools
+	}
+	set := make(map[string]bool, len(names))
+	for _, n := range names {
+		n = strings.TrimSpace(n)
+		if n == "all" || n == "*" {
+			return nil
+		}
+		if n != "" {
+			set[n] = true
+		}
+	}
+	return set
 }
 
 // bronServerInstructions is sent to the MCP client at `initialize` time as
@@ -202,25 +314,28 @@ Tool selection — route the user's intent to the narrowest tool:
 
   - "balance", "holdings", "portfolio", "net worth", "what do I hold" →
     ` + "`bron_balances_list`" + ` (on-chain balances per asset).
-  - "accounts", "vaults", "wallets" → ` + "`bron_accounts_list`" + ` /
-    ` + "`bron_accounts_get`" + `.
+  - "accounts", "vaults", "wallets" → ` + "`bron_accounts_list`" + ` (one by id:
+    pass ` + "`accountIds`" + `).
   - "transactions", "history", "recent activity" → ` + "`bron_tx_list`" + `;
-    one by id → ` + "`bron_tx_get`" + `; its lifecycle events → ` + "`bron_tx_events`" + `.
+    one by id → ` + "`bron_tx_list`" + ` with ` + "`transactionId`" + `; its lifecycle
+    events → ` + "`bron_tx_events`" + `.
   - "send", "send on-chain", "move assets out" → ` + "`bron_tx_withdrawal`" + `
     (state-changing).
   - "staking", "positions", "delegations", "rewards" (read) →
     ` + "`bron_stakes_list`" + `; stake / unstake / claim (state-changing) →
-    the ` + "`bron_tx_stake_*`" + ` shortcuts.
+    ` + "`bron_tx_create`" + ` with the matching ` + "`transactionType`" + ` (call
+    ` + "`bron_help`" + ` with ` + "`bron_tx_stake_delegation`" + ` etc. for params).
   - "incoming", "received", "what came in" → ` + "`bron_tx_list`" + ` with
     ` + "`transactionTypes: deposit`" + `; addresses to receive into →
     ` + "`bron_deposit_addresses_list`" + `.
-  - "buy / sell crypto", "fiat on-ramp / off-ramp" →
-    ` + "`bron_tx_fiat_in` / `bron_tx_fiat_out`" + ` (state-changing; a regulated
-    fiat provider such as Noah runs the KYC/settlement step, not Bron).
+  - "buy / sell crypto", "fiat on-ramp / off-ramp" → ` + "`bron_tx_create`" + `
+    with ` + "`transactionType: fiat-in` / `fiat-out`" + ` (call ` + "`bron_help`" + `
+    with ` + "`bron_tx_fiat_in` / `bron_tx_fiat_out`" + ` for params; state-changing;
+    a regulated fiat provider such as Noah runs the KYC/settlement step, not Bron).
   - "approve / decline / cancel a pending transaction" →
     ` + "`bron_tx_approve` / `bron_tx_decline` / `bron_tx_cancel`" + `.
-  - "saved addresses", "address book" → ` + "`bron_address_book_list`" + ` /
-    ` + "`bron_address_book_get`" + `.
+  - "saved addresses", "address book" → ` + "`bron_address_book_list`" + ` (one by
+    id: pass ` + "`recordIds`" + `).
   - "wait until it completes / is approved / settles" →
     ` + "`bron_tx_wait_for_state`" + ` (long-poll; re-call on timeout).
   - workspace info / settings → ` + "`bron_workspace_info`" + `.
@@ -338,9 +453,9 @@ func walkAndWrap(v any) {
 //     `mcp_composites.go`. Stays small by design — most new behaviour belongs
 //     in the spec, not here.
 func registerTools(server *mcp.Server, cli *client.Client, sdkClient *sdk.BronClient, opts mcpOptions) {
-	registerHelpTool(server)
+	registerHelpTool(server, opts)
 	registerSpecDrivenTools(server, cli, opts)
-	registerClientComposites(server, cli, sdkClient)
+	registerClientComposites(server, cli, sdkClient, opts)
 }
 
 // registerSpecDrivenTools auto-registers one MCP tool per CLI endpoint and one
@@ -357,6 +472,9 @@ func registerSpecDrivenTools(server *mcp.Server, cli *client.Client, opts mcpOpt
 			if opts.readOnly && !isReadOnlyEndpoint(r, v, e) {
 				continue
 			}
+			if !opts.allows(toolName(r, v)) {
+				continue
+			}
 			registerEndpoint(server, cli, r, v, e)
 		}
 	}
@@ -367,8 +485,10 @@ func registerSpecDrivenTools(server *mcp.Server, cli *client.Client, opts mcpOpt
 		// still observe and dry-run via the (non-shortcut) endpoints above.
 		return
 	}
-	shortcuts := sortedKeys(generated.TxShortcuts)
-	for _, name := range shortcuts {
+	for _, name := range sortedKeys(generated.TxShortcuts) {
+		if !opts.allows("bron_tx_" + sanitizeName(name)) {
+			continue
+		}
 		registerTxShortcut(server, cli, name, generated.TxShortcuts[name])
 	}
 }
