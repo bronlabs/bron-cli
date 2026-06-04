@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.15 — 2026-06-04
+
+### Security
+- Harden the `<untrusted source="…">…</untrusted>` annotation of free-form fields in MCP tool responses. Field values are now entity-escaped before they are wrapped, so a value's own content can no longer affect the surrounding envelope. The set of annotated counterparty-supplied fields is widened to cover cross-workspace names and tags, member display names, address-book tags, and activity titles.
+
 ## 0.3.13 — 2026-06-01
 
 ### Added
