@@ -1,3 +1,5 @@
+github.com/bronlabs/bron-api-toolkit v0.1.1 h1:vvqwdixOrtNSKjJYA628I7X8ZLqVkPIjui+XwPE5Vjg=
+github.com/bronlabs/bron-api-toolkit v0.1.1/go.mod h1:gw+vMqNNYJCL9eZNbIZwkR/LL3112CMCC0EWgoONbB8=
 github.com/bronlabs/bron-sdk-go v0.1.19 h1:wNqp8Nb7a/iNt80cAK0jk6FqY6jN27VcqXlvFmYrHOE=
 github.com/bronlabs/bron-sdk-go v0.1.19/go.mod h1:HFhbaTYfO8TAFlBQx7v2LO6MfnWTuCBwNGNDsYU5N1Y=
 github.com/cpuguy83/go-md2man/v2 v2.0.4/go.mod h1:tgQtvFlXSQOSOSIRvRPT7W67SCa46tRHOmNcaadrF8o=

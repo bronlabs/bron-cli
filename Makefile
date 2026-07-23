@@ -1,4 +1,4 @@
-.PHONY: build build-fast generate test lint lint-fix tidy dist clean help
+.PHONY: build test lint lint-fix tidy dist clean help
 
 VERSION    ?= dev-$(shell date +%Y-%m-%d-%H-%M)
 GO         := go
@@ -6,28 +6,10 @@ GOFLAGS    ?= -trimpath
 LDFLAGS    := -s -w -X main.Version=$(VERSION)
 ENV        := CGO_ENABLED=0
 
-CLIGEN_SRC := $(wildcard cmd/cligen/*.go)
-SPEC       := bron-open-api-public.json
-STAMP      := generated/.stamp
-GEN_FILES  := generated/commands.go generated/helpdoc.go generated/spec.go generated/spec.json
-
-# Default target.
-build: $(STAMP)
+# Default target. The command tree is built at runtime from the bron-api-toolkit
+# catalog — there is no generated Go source in this repo anymore.
+build:
 	$(ENV) $(GO) build $(GOFLAGS) -ldflags='$(LDFLAGS)' -o bin/bron ./cmd/bron
-
-# Force a regen + build (useful after pulling spec changes the timestamp didn't catch).
-build-fast: generate
-	$(ENV) $(GO) build $(GOFLAGS) -ldflags='$(LDFLAGS)' -o bin/bron ./cmd/bron
-
-# Stamp-based incremental generation: re-run cligen only if the spec
-# or its sources moved.
-$(STAMP): $(SPEC) $(CLIGEN_SRC)
-	$(GO) run ./cmd/cligen $(SPEC) generated
-	@touch $@
-
-generate:
-	$(GO) run ./cmd/cligen $(SPEC) generated
-	@touch $(STAMP)
 
 test:
 	$(GO) test ./...
@@ -43,7 +25,7 @@ tidy:
 
 # Cross-compiled release binaries: bin/bron-<os>-<arch>[.exe].
 PLATFORMS := darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64
-dist: $(STAMP)
+dist:
 	@mkdir -p bin
 	@for p in $(PLATFORMS); do \
 		os=$${p%/*}; arch=$${p#*/}; \
@@ -54,4 +36,4 @@ dist: $(STAMP)
 	done
 
 clean:
-	rm -rf bin/ generated/
+	rm -rf bin/

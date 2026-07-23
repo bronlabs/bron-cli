@@ -4,14 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/bronlabs/bron-cli/generated"
+	"github.com/bronlabs/bron-api-toolkit/catalog"
+	"github.com/bronlabs/bron-api-toolkit/mcptools"
+	"github.com/bronlabs/bron-api-toolkit/output"
 	"github.com/bronlabs/bron-cli/internal/client"
-	"github.com/bronlabs/bron-cli/internal/output"
 )
 
 // wrapTxListEmbedAssets replaces the generated `tx list` RunE with a wrapper
@@ -61,23 +61,23 @@ func runTxListWithAssets(cmd *cobra.Command, gf *globalFlags) error {
 		return err
 	}
 
-	assetIds := uniqueTxAssetIds(txs)
+	assetIds := mcptools.UniqueTxAssetIds(txs)
 	if len(assetIds) == 0 {
 		return output.Print(txs)
 	}
 
-	assetById, err := fetchAssetsById(ctx, cli, assetIds)
+	assetById, err := mcptools.FetchAssetsById(ctx, cli, assetIds)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: --embed assets: could not fetch asset details: %v\n", err)
 		return output.Print(txs)
 	}
 
-	embedAssetsIntoTxs(txs, assetById)
+	mcptools.EmbedAssetsIntoTxs(txs, assetById)
 	return output.Print(txs)
 }
 
 func fetchTxList(ctx context.Context, cli *client.Client, cmd *cobra.Command) (interface{}, error) {
-	entry, ok := generated.HelpEntries["tx"]["list"]
+	entry, ok := catalog.HelpEntries["tx"]["list"]
 	if !ok {
 		return nil, fmt.Errorf("tx list entry missing from generated HelpEntries")
 	}
@@ -99,71 +99,4 @@ func fetchTxList(ctx context.Context, cli *client.Client, cmd *cobra.Command) (i
 		return nil, err
 	}
 	return result, nil
-}
-
-func fetchAssetsById(ctx context.Context, cli *client.Client, assetIds []string) (map[string]map[string]interface{}, error) {
-	var v interface{}
-	query := map[string]interface{}{"assetIds": strings.Join(assetIds, ",")}
-	if err := cli.Do(ctx, "GET", "/dictionary/assets", nil, nil, query, &v); err != nil {
-		return nil, err
-	}
-
-	out := map[string]map[string]interface{}{}
-	m, ok := v.(map[string]interface{})
-	if !ok {
-		return out, nil
-	}
-	arr, _ := m["assets"].([]interface{})
-	for _, item := range arr {
-		am, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		if id, _ := am["assetId"].(string); id != "" {
-			out[id] = am
-		}
-	}
-	return out, nil
-}
-
-// uniqueTxAssetIds collects every assetId reachable through `params.assetId` on
-// each transaction. Intent transactions store fromAssetId/toAssetId in a
-// separate intents resource, not on the tx itself, so they're not resolved
-// here — that needs `--embed intents` (out of scope for this commit).
-func uniqueTxAssetIds(v interface{}) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, t := range txItems(v) {
-		params, _ := t["params"].(map[string]interface{})
-		if id, _ := params["assetId"].(string); id != "" && !seen[id] {
-			seen[id] = true
-			out = append(out, id)
-		}
-	}
-	return out
-}
-
-func txItems(v interface{}) []map[string]interface{} {
-	return mapItems(v, "transactions")
-}
-
-// embedAssetsIntoTxs attaches the resolved Asset under `_embedded.asset` on
-// each transaction whose `params.assetId` is in the map. Sticks to the
-// existing TransactionEmbedded convention (`_embedded` already carries other
-// resolved entities like accounts, events, signing requests).
-func embedAssetsIntoTxs(v interface{}, assetById map[string]map[string]interface{}) {
-	for _, t := range txItems(v) {
-		params, _ := t["params"].(map[string]interface{})
-		assetId, _ := params["assetId"].(string)
-		asset, ok := assetById[assetId]
-		if !ok {
-			continue
-		}
-		emb, _ := t["_embedded"].(map[string]interface{})
-		if emb == nil {
-			emb = map[string]interface{}{}
-			t["_embedded"] = emb
-		}
-		emb["asset"] = asset
-	}
 }

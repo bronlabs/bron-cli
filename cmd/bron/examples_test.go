@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bronlabs/bron-cli/generated"
+	"github.com/bronlabs/bron-api-toolkit/catalog"
 )
 
 // TestExamplesAreInSync validates every `bron <resource> <verb> ...` snippet in
@@ -21,7 +21,7 @@ import (
 // updated alongside. Doesn't validate value semantics — just shape.
 //
 // What's checked per snippet:
-//   - <resource>+<verb> exists in generated.HelpEntries (or it's a known
+//   - <resource>+<verb> exists in catalog.HelpEntries (or it's a known
 //     system command: help, auth, config, completion, version)
 //   - For `bron tx <type>`: <type> is a real transactionType shortcut
 //   - Every --<flag> resolves to one of: a query param on the endpoint, a body
@@ -155,7 +155,7 @@ func tokenizeShell(s string) []string {
 // --- validation ---
 
 // handwrittenTxVerbs lists `bron tx <verb>` commands that are NOT in
-// generated.HelpEntries (because they're hand-written in cmd/bron/, not
+// catalog.HelpEntries (because they're hand-written in cmd/bron/, not
 // emitted by cligen). The map value is the set of valid flag names.
 var handwrittenTxVerbs = map[string]map[string]bool{
 	"subscribe": {
@@ -216,7 +216,7 @@ func validateSnippet(t *testing.T, s snippet, bodyLeaves bodyLeavesByRef, global
 	// Special-case: `bron tx <type>` is the create-shortcut subtree.
 	if resource == "tx" {
 		// Verb may be a real tx verb (list/get/...) or a transactionType.
-		if _, ok := generated.TxShortcuts[verb]; ok {
+		if _, ok := catalog.TxShortcuts[verb]; ok {
 			validateTxShortcut(t, loc, s.tokens, verb, globals)
 			return
 		}
@@ -229,9 +229,9 @@ func validateSnippet(t *testing.T, s snippet, bodyLeaves bodyLeavesByRef, global
 		// fall through: validate as bron tx <verb>
 	}
 
-	verbs, ok := generated.HelpEntries[resource]
+	verbs, ok := catalog.HelpEntries[resource]
 	if !ok {
-		t.Errorf("%s: unknown resource %q (`bron %s ...`); known: %s", loc, resource, resource, strings.Join(sortedKeysHelp(generated.HelpEntries), ", "))
+		t.Errorf("%s: unknown resource %q (`bron %s ...`); known: %s", loc, resource, resource, strings.Join(sortedKeysHelp(catalog.HelpEntries), ", "))
 		return
 	}
 	entry, ok := verbs[verb]
@@ -245,7 +245,7 @@ func validateSnippet(t *testing.T, s snippet, bodyLeaves bodyLeavesByRef, global
 
 func validateTxShortcut(t *testing.T, loc string, tokens []string, txType string, globals map[string]bool) {
 	t.Helper()
-	sc := generated.TxShortcuts[txType]
+	sc := catalog.TxShortcuts[txType]
 	rest := tokens[3:]
 	for _, tok := range rest {
 		if !strings.HasPrefix(tok, "--") {
@@ -277,7 +277,7 @@ func validateTxShortcut(t *testing.T, loc string, tokens []string, txType string
 	}
 }
 
-func validateFlags(t *testing.T, loc string, rest []string, entry generated.HelpEntry, bodyLeaves bodyLeavesByRef, globals map[string]bool) {
+func validateFlags(t *testing.T, loc string, rest []string, entry catalog.HelpEntry, bodyLeaves bodyLeavesByRef, globals map[string]bool) {
 	t.Helper()
 	queries := map[string]bool{}
 	for _, q := range entry.QueryParams {
@@ -328,7 +328,7 @@ func buildBodyLeaves(t *testing.T) bodyLeavesByRef {
 			Schemas map[string]rawSchemaForLeaves `json:"schemas"`
 		} `json:"components"`
 	}
-	if err := json.Unmarshal(generated.Spec, &spec); err != nil {
+	if err := json.Unmarshal(catalog.Spec, &spec); err != nil {
 		t.Fatalf("parse embedded spec: %v", err)
 	}
 	out := bodyLeavesByRef{}
@@ -469,7 +469,7 @@ func contains(xs []string, v string) bool {
 	return false
 }
 
-func queryNames(ps []generated.HelpQueryParam) []string {
+func queryNames(ps []catalog.HelpQueryParam) []string {
 	out := make([]string, len(ps))
 	for i, p := range ps {
 		out[i] = p.Name
@@ -484,7 +484,7 @@ func truncList(xs []string, n int) string {
 	return strings.Join(xs[:n], ", ") + ", ..."
 }
 
-func sortedKeysHelp(m map[string]map[string]generated.HelpEntry) []string {
+func sortedKeysHelp(m map[string]map[string]catalog.HelpEntry) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)
@@ -493,7 +493,7 @@ func sortedKeysHelp(m map[string]map[string]generated.HelpEntry) []string {
 	return out
 }
 
-func sortedKeysVerb(m map[string]generated.HelpEntry) []string {
+func sortedKeysVerb(m map[string]catalog.HelpEntry) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)

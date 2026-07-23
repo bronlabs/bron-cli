@@ -12,8 +12,9 @@ import (
 	sdk "github.com/bronlabs/bron-sdk-go/sdk"
 	"github.com/bronlabs/bron-sdk-go/sdk/types"
 
+	"github.com/bronlabs/bron-api-toolkit/mcptools"
+	"github.com/bronlabs/bron-api-toolkit/output"
 	"github.com/bronlabs/bron-cli/internal/client"
-	"github.com/bronlabs/bron-cli/internal/output"
 )
 
 // Client-side composites — hand-written MCP tools that orchestrate REST + WS
@@ -95,9 +96,9 @@ func registerTxWaitForState(server *mcp.Server, sdkClient *sdk.BronClient) {
 	mcp.AddTool(server, tool, func(ctx context.Context, _ *mcp.CallToolRequest, in waitForStateInput) (*mcp.CallToolResult, any, error) {
 		result, err := runWaitForState(ctx, sdkClient, in)
 		if err != nil {
-			return errorResult(err), nil, nil
+			return mcptools.ErrorResult(client.WrapAPIError(err)), nil, nil
 		}
-		return nil, wrapUntrustedFields(output.HumanizeDates(result)), nil
+		return nil, mcptools.WrapUntrustedFields(output.HumanizeDates(result)), nil
 	})
 }
 

@@ -10,7 +10,8 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/bronlabs/bron-cli/generated"
+	"github.com/bronlabs/bron-api-toolkit/catalog"
+	"github.com/bronlabs/bron-api-toolkit/mcptools"
 )
 
 // bron_help is the single discovery tool. Its own description is deliberately
@@ -143,7 +144,7 @@ func helpResult(in map[string]any) *mcp.CallToolResult {
 			text = body
 		} else {
 			text = fmt.Sprintf("Unknown topic %q. Available: %s.\n\n%s",
-				topic, strings.Join(sortedKeys(helpTopics), ", "), helpOverview)
+				topic, strings.Join(mcptools.SortedKeys(helpTopics), ", "), helpOverview)
 		}
 	} else if tool := strings.TrimSpace(stringArg(in, "tool")); tool != "" {
 		text = helpForTool(tool)
@@ -201,7 +202,7 @@ func helpForTool(tool string) string {
 // the shared top-level fields plus the per-type `params.*` resolved from the
 // shortcut's ParamsRef component in the embedded spec. This is how an agent
 // discovers the payload for any transaction type from one tool.
-func helpForTxShortcut(tool, name string, sc generated.TxShortcut) string {
+func helpForTxShortcut(tool, name string, sc catalog.TxShortcut) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "# %s\n\nCreates a `%s` transaction. State-changing — confirm with the user.\n\n", tool, name)
 
@@ -243,24 +244,24 @@ func helpForTxShortcut(tool, name string, sc generated.TxShortcut) string {
 	return sb.String()
 }
 
-func findTxShortcut(tool string) (string, generated.TxShortcut, bool) {
-	for name, sc := range generated.TxShortcuts {
-		if "bron_tx_"+sanitizeName(name) == tool {
+func findTxShortcut(tool string) (string, catalog.TxShortcut, bool) {
+	for name, sc := range catalog.TxShortcuts {
+		if "bron_tx_"+mcptools.SanitizeName(name) == tool {
 			return name, sc, true
 		}
 	}
-	return "", generated.TxShortcut{}, false
+	return "", catalog.TxShortcut{}, false
 }
 
-func findHelpEntry(tool string) (generated.HelpEntry, bool) {
-	for r, verbs := range generated.HelpEntries {
+func findHelpEntry(tool string) (catalog.HelpEntry, bool) {
+	for r, verbs := range catalog.HelpEntries {
 		for v, e := range verbs {
-			if toolName(r, v) == tool {
+			if mcptools.ToolName(r, v) == tool {
 				return e, true
 			}
 		}
 	}
-	return generated.HelpEntry{}, false
+	return catalog.HelpEntry{}, false
 }
 
 // resolveSchemaFieldsAt walks the embedded OpenAPI spec from a component schema
@@ -282,7 +283,7 @@ func resolveSchemaFieldsAt(ref, rootPath string) []string {
 // terminate.
 func walkSpecScalars(ref, rootPath string, visit func(path, scalarType string, node map[string]any)) {
 	var spec map[string]any
-	if err := json.Unmarshal(generated.Spec, &spec); err != nil {
+	if err := json.Unmarshal(catalog.Spec, &spec); err != nil {
 		return
 	}
 	components, _ := spec["components"].(map[string]any)

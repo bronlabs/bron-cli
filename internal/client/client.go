@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/bronlabs/bron-api-toolkit/mcptools"
 	sdkhttp "github.com/bronlabs/bron-sdk-go/sdk/http"
 
 	"github.com/bronlabs/bron-cli/internal/config"
@@ -124,11 +126,11 @@ func (c *Client) Do(ctx context.Context, method, path string, pathParams map[str
 	}
 	opts := sdkhttp.RequestOptions{Method: method, Path: resolved, Body: body, Query: query}
 	if result == nil {
-		return c.http.RequestWithContext(ctx, nil, opts)
+		return WrapAPIError(c.http.RequestWithContext(ctx, nil, opts))
 	}
 	var raw json.RawMessage
 	if err := c.http.RequestWithContext(ctx, &raw, opts); err != nil {
-		return err
+		return WrapAPIError(err)
 	}
 	if len(raw) == 0 {
 		return nil
@@ -136,4 +138,21 @@ func (c *Client) Do(ctx context.Context, method, path string, pathParams map[str
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
 	return dec.Decode(result)
+}
+
+// WrapAPIError maps a bron-sdk-go APIError to the toolkit's structured
+// mcptools.APIError, so the MCP surface (ErrorResult) and the CLI error printer
+// branch on the same type — the toolkit lib can't import sdk/http itself.
+// Non-APIError values pass through unchanged.
+func WrapAPIError(err error) error {
+	var apiErr *sdkhttp.APIError
+	if errors.As(err, &apiErr) {
+		return &mcptools.APIError{
+			Status:    apiErr.Status,
+			Code:      apiErr.Code,
+			Message:   apiErr.Message,
+			RequestID: apiErr.RequestID,
+		}
+	}
+	return err
 }

@@ -16,10 +16,10 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/bronlabs/bron-api-toolkit/output"
 	"github.com/bronlabs/bron-cli/internal/auth"
 	"github.com/bronlabs/bron-cli/internal/client"
 	"github.com/bronlabs/bron-cli/internal/config"
-	"github.com/bronlabs/bron-cli/internal/output"
 	"github.com/bronlabs/bron-cli/internal/util"
 )
 

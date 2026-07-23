@@ -15,9 +15,9 @@ import (
 	"github.com/bronlabs/bron-sdk-go/sdk/realtime"
 	"github.com/bronlabs/bron-sdk-go/sdk/types"
 
+	"github.com/bronlabs/bron-api-toolkit/output"
+	"github.com/bronlabs/bron-api-toolkit/qparam"
 	"github.com/bronlabs/bron-cli/internal/config"
-	"github.com/bronlabs/bron-cli/internal/output"
-	"github.com/bronlabs/bron-cli/internal/qparam"
 )
 
 // newTxSubscribeCmd builds `bron tx subscribe`.
@@ -28,16 +28,16 @@ import (
 // signal handling, JSON-line output.
 func newTxSubscribeCmd(gf *globalFlags) *cobra.Command {
 	var (
-		accountID      string
-		accountIDs     string
-		txID           string
-		txIDs          string
-		statuses       string
-		statusNotIn    string
-		txTypes        string
-		createdAtFrom  string
-		createdAtTo    string
-		withHistory    bool
+		accountID     string
+		accountIDs    string
+		txID          string
+		txIDs         string
+		statuses      string
+		statusNotIn   string
+		txTypes       string
+		createdAtFrom string
+		createdAtTo   string
+		withHistory   bool
 	)
 	cmd := &cobra.Command{
 		Use:   "subscribe",

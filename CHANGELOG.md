@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.16 — 2026-07-23
+
+### Changed
+- The CLI command tree and the MCP tool layer are now built at runtime from the [bron-api-toolkit](https://github.com/bronlabs/bron-api-toolkit) catalog — spec-distilled data shared across Bron clients — instead of Go source generated in this repo. Command surface, flags, help output and MCP tool schemas are unchanged.
+- `--embed prices` / `--embed assets` enrichment now runs through the toolkit's shared augmentors; behaviour is unchanged.
+
+### Removed
+- `accounts list --isDefiVault` — the filter was dropped from the public API spec.
+
 ## 0.3.15 — 2026-06-04
 
 ### Security

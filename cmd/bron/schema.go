@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/bronlabs/bron-cli/generated"
+	"github.com/bronlabs/bron-api-toolkit/catalog"
 )
 
 // buildFullSchemaDoc returns the embedded OpenAPI 3.1 spec verbatim, decorated
@@ -22,7 +22,7 @@ import (
 //   - tx_shortcuts[]: synthetic `bron tx <type>` commands with their params class
 func buildFullSchemaDoc() (map[string]interface{}, error) {
 	var doc map[string]interface{}
-	if err := json.Unmarshal(generated.Spec, &doc); err != nil {
+	if err := json.Unmarshal(catalog.Spec, &doc); err != nil {
 		return nil, fmt.Errorf("decode embedded spec: %w", err)
 	}
 
@@ -41,21 +41,21 @@ func buildFullSchemaDoc() (map[string]interface{}, error) {
 		TopFields []string `json:"topFields"`
 	}
 
-	resources := make([]string, 0, len(generated.HelpEntries))
-	for r := range generated.HelpEntries {
+	resources := make([]string, 0, len(catalog.HelpEntries))
+	for r := range catalog.HelpEntries {
 		resources = append(resources, r)
 	}
 	sort.Strings(resources)
 
 	commands := make([]cmdDoc, 0, 64)
 	for _, r := range resources {
-		verbs := make([]string, 0, len(generated.HelpEntries[r]))
-		for v := range generated.HelpEntries[r] {
+		verbs := make([]string, 0, len(catalog.HelpEntries[r]))
+		for v := range catalog.HelpEntries[r] {
 			verbs = append(verbs, v)
 		}
 		sort.Strings(verbs)
 		for _, v := range verbs {
-			e := generated.HelpEntries[r][v]
+			e := catalog.HelpEntries[r][v]
 			usage := "bron " + r + " " + v
 			for _, p := range e.PathArgs {
 				usage += " <" + p + ">"
@@ -70,14 +70,14 @@ func buildFullSchemaDoc() (map[string]interface{}, error) {
 		}
 	}
 
-	txTypes := make([]string, 0, len(generated.TxShortcuts))
-	for t := range generated.TxShortcuts {
+	txTypes := make([]string, 0, len(catalog.TxShortcuts))
+	for t := range catalog.TxShortcuts {
 		txTypes = append(txTypes, t)
 	}
 	sort.Strings(txTypes)
 	tx := make([]txDoc, 0, len(txTypes))
 	for _, t := range txTypes {
-		s := generated.TxShortcuts[t]
+		s := catalog.TxShortcuts[t]
 		tx = append(tx, txDoc{
 			Type:      t,
 			Usage:     "bron tx " + t,
@@ -113,7 +113,7 @@ func appendReturnsHint(cmd *cobra.Command) {
 	out := cmd.OutOrStdout()
 
 	if parent := cmd.Parent(); parent != nil && parent.Name() == "tx" {
-		if sc, ok := generated.TxShortcuts[cmd.Name()]; ok && sc.ParamsRef != "" {
+		if sc, ok := catalog.TxShortcuts[cmd.Name()]; ok && sc.ParamsRef != "" {
 			_, _ = fmt.Fprintf(out, "\nBody params: %s\n", sc.ParamsRef)
 			printProps(out, topLevelProps(sc.ParamsRef, false), "  ")
 		}
@@ -300,7 +300,7 @@ func firstLine(s string) string {
 // The components.schemas map is the transitive closure of refs reachable from
 // the operation — keeps the per-command payload small while still letting
 // consumers resolve every $ref locally without a second fetch.
-func buildCommandHelpDoc(resource, verb string, entry generated.HelpEntry) (map[string]interface{}, error) {
+func buildCommandHelpDoc(resource, verb string, entry catalog.HelpEntry) (map[string]interface{}, error) {
 	usage := "bron " + resource + " " + verb
 	for _, p := range entry.PathArgs {
 		usage += " <" + p + ">"
@@ -362,7 +362,7 @@ func closureSchemas(root interface{}) (map[string]interface{}, error) {
 			Schemas map[string]json.RawMessage `json:"schemas"`
 		} `json:"components"`
 	}
-	if err := json.Unmarshal(generated.Spec, &allSchemas); err != nil {
+	if err := json.Unmarshal(catalog.Spec, &allSchemas); err != nil {
 		return nil, fmt.Errorf("decode spec components: %w", err)
 	}
 	out := map[string]interface{}{}
@@ -414,79 +414,13 @@ func collectRefs(v interface{}) []string {
 	return out
 }
 
-// collectDateKeysFromSpec scans the embedded OpenAPI spec for every name that
-// the spec declares as `format: "date-time-millis"` (the OpenAPI translation
-// of the backend's `@EpochMillis` marker) and returns them as a set.
-//
-// Two scans are merged into one set:
-//   - response/body shapes — `components.schemas[*].properties[*]`
-//   - request query/path params — `paths[*][<method>].parameters[]`
-//
-// One level of properties per component schema is sufficient: `@EpochMillis`
-// is applied directly on Long fields in datamodel DTOs, each DTO becomes its
-// own component, and timestamp names (createdAt, expiresAt, terminatedAtFrom,
-// updatedSince, ...) are unique enough across the API that name-only matching
-// has no false positives. If a future change nests `@EpochMillis` deeper
-// (e.g. inside an inline object property), expand this scan.
-//
-// The result drives both ends of the date pipeline:
-//   - request-side coercion (qparam.IsDateParam → MaybeDate, used by
-//     compactQuery on every CLI list-call and by mcp.go on body composition);
-//   - response-side humanization (output.SetDateKeys → ISO-8601 rendering).
-func collectDateKeysFromSpec() map[string]bool {
-	keys := map[string]bool{}
-	var spec struct {
-		Components struct {
-			Schemas map[string]struct {
-				Properties map[string]struct {
-					Format string `json:"format"`
-					Items  struct {
-						Format string `json:"format"`
-					} `json:"items"`
-				} `json:"properties"`
-			} `json:"schemas"`
-		} `json:"components"`
-		Paths map[string]map[string]struct {
-			Parameters []struct {
-				Name   string `json:"name"`
-				Schema struct {
-					Format string `json:"format"`
-					Items  struct {
-						Format string `json:"format"`
-					} `json:"items"`
-				} `json:"schema"`
-			} `json:"parameters"`
-		} `json:"paths"`
-	}
-	if err := json.Unmarshal(generated.Spec, &spec); err != nil {
-		return keys
-	}
-	for _, schema := range spec.Components.Schemas {
-		for name, prop := range schema.Properties {
-			if prop.Format == "date-time-millis" || prop.Items.Format == "date-time-millis" {
-				keys[name] = true
-			}
-		}
-	}
-	for _, methods := range spec.Paths {
-		for _, op := range methods {
-			for _, p := range op.Parameters {
-				if p.Schema.Format == "date-time-millis" || p.Schema.Items.Format == "date-time-millis" {
-					keys[p.Name] = true
-				}
-			}
-		}
-	}
-	return keys
-}
-
 // lookupOperation pulls the operation node for a (method, path) pair from the
 // embedded spec.
 func lookupOperation(method, path string) (map[string]interface{}, error) {
 	var spec struct {
 		Paths map[string]map[string]json.RawMessage `json:"paths"`
 	}
-	if err := json.Unmarshal(generated.Spec, &spec); err != nil {
+	if err := json.Unmarshal(catalog.Spec, &spec); err != nil {
 		return nil, fmt.Errorf("parse spec: %w", err)
 	}
 	pathItem, ok := spec.Paths[path]
@@ -538,7 +472,7 @@ func resolveRef(name string) (interface{}, error) {
 			Schemas map[string]json.RawMessage `json:"schemas"`
 		} `json:"components"`
 	}
-	if err := json.Unmarshal(generated.Spec, &spec); err != nil {
+	if err := json.Unmarshal(catalog.Spec, &spec); err != nil {
 		return nil, fmt.Errorf("parse spec: %w", err)
 	}
 	raw, ok := spec.Components.Schemas[name]

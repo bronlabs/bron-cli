@@ -440,15 +440,14 @@ bron --output yaml help <r> <v> --schema        # same per-command dump in YAML
 ### Build & test
 
 ```bash
-make build              # incremental: regen if spec/cligen changed, then go build
-make generate           # force-run cligen against the OpenAPI spec
+make build              # go build ./cmd/bron into bin/
 make dist               # cross-compile darwin/linux × amd64/arm64 into bin/
 make test
 ```
 
 `VERSION=<tag> make build` stamps the binary with `bron --version`.
 
-Generated files (`generated/commands.go`, `helpdoc.go`, `spec.go`, `spec.json`) are committed alongside the spec so `go install github.com/bronlabs/bron-cli/cmd/bron@latest` works on a fresh clone. `make build` regenerates them via `cligen`; CI verifies they stay in sync with the spec. `bin/` is gitignored.
+The command tree is built at runtime from the [`bron-api-toolkit`](https://github.com/bronlabs/bron-api-toolkit) catalog (`HelpEntries` / `TxShortcuts` + the embedded OpenAPI spec) — there is no generated Go source in this repo. Regenerating the catalog after an API release happens in the toolkit (`make generate`); the CLI then bumps its toolkit dependency. `bin/` is gitignored.
 
 ### Built on
 

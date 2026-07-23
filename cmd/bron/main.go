@@ -10,14 +10,13 @@ import (
 	"strings"
 
 	sdk "github.com/bronlabs/bron-sdk-go/sdk"
-	sdkhttp "github.com/bronlabs/bron-sdk-go/sdk/http"
 	"github.com/spf13/cobra"
 
-	"github.com/bronlabs/bron-cli/generated"
+	"github.com/bronlabs/bron-api-toolkit/catalog"
+	"github.com/bronlabs/bron-api-toolkit/mcptools"
+	"github.com/bronlabs/bron-api-toolkit/output"
 	"github.com/bronlabs/bron-cli/internal/client"
 	"github.com/bronlabs/bron-cli/internal/config"
-	"github.com/bronlabs/bron-cli/internal/output"
-	"github.com/bronlabs/bron-cli/internal/qparam"
 )
 
 var Version = "dev"
@@ -163,10 +162,6 @@ func main() {
 
 	gf := &globalFlags{}
 
-	dateKeys := collectDateKeysFromSpec()
-	output.SetDateKeys(dateKeys)
-	qparam.SetDateKeys(dateKeys)
-
 	root := &cobra.Command{
 		Use:           "bron <resource> <verb> [<id>...] [flags]",
 		Short:         "Bron CLI — public API client",
@@ -259,10 +254,10 @@ func main() {
 		return nil
 	}
 
-	generated.Register(root, func() (*client.Client, error) { return buildClient(gf) })
+	registerAPICommands(root, func() (*client.Client, error) { return buildClient(gf) })
 
 	// `bron balances list --embed prices` and `bron tx list --embed assets`
-	// are CLI-side orchestrations: the generated RunE doesn't know about
+	// are CLI-side orchestrations: the built RunE doesn't know about
 	// these tokens, so wrap each one to fall through to the augmented path
 	// when the token is set.
 	wrapBalancesListEmbedPrices(root, gf)
@@ -290,7 +285,7 @@ func main() {
 	root.SetHelpCommand(helpCmd)
 
 	// `bron tx subscribe` — WebSocket prototype, hand-written. Attach as a child
-	// of the generated `tx` resource so it sits next to the regular verbs.
+	// of the built `tx` resource so it sits next to the regular verbs.
 	for _, c := range root.Commands() {
 		if c.Name() == "tx" {
 			c.AddCommand(newTxSubscribeCmd(gf))
@@ -318,7 +313,7 @@ func main() {
 		if errors.Is(err, errSchemaHandled) {
 			return
 		}
-		var apiErr *sdkhttp.APIError
+		var apiErr *mcptools.APIError
 		if errors.As(err, &apiErr) && (apiErr.Status != 0 || apiErr.Message != "") {
 			fmt.Fprintf(os.Stderr, "error: %s\n", output.SanitizeForTerminal(apiErr.Message))
 			fmt.Fprintf(os.Stderr, "  status: %d\n", apiErr.Status)
@@ -495,14 +490,14 @@ func newHelpCmd() *cobra.Command {
 // resources comes from the generated HelpEntries map so it stays in sync with
 // the spec; topic names come from the static topics table.
 func printHelpNavigation(w io.Writer) error {
-	resources := make([]string, 0, len(generated.HelpEntries))
-	for r := range generated.HelpEntries {
+	resources := make([]string, 0, len(catalog.HelpEntries))
+	for r := range catalog.HelpEntries {
 		resources = append(resources, r)
 	}
 	sort.Strings(resources)
 
-	tx := make([]string, 0, len(generated.TxShortcuts))
-	for k := range generated.TxShortcuts {
+	tx := make([]string, 0, len(catalog.TxShortcuts))
+	for k := range catalog.TxShortcuts {
 		tx = append(tx, k)
 	}
 	sort.Strings(tx)
@@ -562,7 +557,7 @@ func resourceVerbFor(cmd *cobra.Command) (string, string, bool) {
 	}
 	parent := cmd.Parent()
 	if parent != nil && parent.Name() == "tx" {
-		if _, isShortcut := generated.TxShortcuts[cmd.Name()]; isShortcut {
+		if _, isShortcut := catalog.TxShortcuts[cmd.Name()]; isShortcut {
 			return "tx", "create", true
 		}
 		return "tx", cmd.Name(), true
@@ -583,9 +578,9 @@ func resourceVerbFor(cmd *cobra.Command) (string, string, bool) {
 //
 // `prices` and `assets` are CLI-only tokens (no backend includeXxx flag yet);
 // each triggers a post-process orchestrator on its specific command. Skipped
-// silently for any other command. cligen guards at gen-time against an
+// silently for any other command. checkEmbedTokenConflicts guards against an
 // `includeXxx` query param producing a colliding token, so the hand-wired and
-// generated paths can never both match the same token.
+// built paths can never both match the same token.
 func applyEmbed(cmd *cobra.Command, embed string) {
 	if embed == "" {
 		return
@@ -642,10 +637,10 @@ func embedHasToken(embed, tok string) bool {
 	return false
 }
 
-func lookupEntry(resource, verb string) (generated.HelpEntry, bool) {
-	verbs, ok := generated.HelpEntries[resource]
+func lookupEntry(resource, verb string) (catalog.HelpEntry, bool) {
+	verbs, ok := catalog.HelpEntries[resource]
 	if !ok {
-		return generated.HelpEntry{}, false
+		return catalog.HelpEntry{}, false
 	}
 	e, ok := verbs[verb]
 	return e, ok
