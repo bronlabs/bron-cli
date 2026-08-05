@@ -376,6 +376,9 @@ func registerTools(server *mcp.Server, cli *client.Client, sdkClient *sdk.BronCl
 		EmbedAugmentors:   mcptools.DefaultEmbedAugmentors,
 		PreCallValidators: preCallValidators,
 	})
+	if opts.allows("bron_portfolio_summary") {
+		mcptools.RegisterPortfolioSummary(server, cli, mcptools.Options{})
+	}
 	registerTxShortcuts(server, cli, opts)
 	registerClientComposites(server, cli, sdkClient, opts)
 }

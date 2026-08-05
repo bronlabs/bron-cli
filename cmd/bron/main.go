@@ -260,7 +260,7 @@ func main() {
 	// are CLI-side orchestrations: the built RunE doesn't know about
 	// these tokens, so wrap each one to fall through to the augmented path
 	// when the token is set.
-	wrapBalancesListEmbedPrices(root, gf)
+	wrapBalancesListEmbeds(root, gf)
 	wrapTxListEmbedAssets(root, gf)
 
 	// --schema short-circuits the verb command, but cobra validates Args before

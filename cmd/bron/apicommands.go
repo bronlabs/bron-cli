@@ -247,15 +247,6 @@ func buildQuery(e catalog.HelpEntry, qvals map[string]*string) (interface{}, err
 	if len(e.QueryParams) == 0 {
 		return nil, nil
 	}
-	for _, q := range e.QueryParams {
-		if len(q.Enum) == 0 {
-			continue
-		}
-		repeat := strings.HasSuffix(q.Type, "[]") || q.Type == "array"
-		if err := qparam.ValidateEnum(q.Name, *qvals[q.Name], q.Enum, repeat); err != nil {
-			return nil, err
-		}
-	}
 	m := make(map[string]interface{}, len(e.QueryParams))
 	for _, q := range e.QueryParams {
 		m[q.Name] = *qvals[q.Name]

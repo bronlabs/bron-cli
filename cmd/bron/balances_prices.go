@@ -14,15 +14,9 @@ import (
 	"github.com/bronlabs/bron-cli/internal/client"
 )
 
-// wrapBalancesListEmbedPrices replaces the generated `balances list` RunE with
-// a wrapper that augments each balance with `usdPrice` and `usdValue` when
-// `--embed prices` is on. Falls through to the original RunE otherwise.
-//
-// The backend has no `includePrices` filter on the balances endpoint, so this
-// is a CLI-side join: fetch balances, then call /dictionary/asset-market-prices
-// keyed by assetId. AssetMarketPrice already carries baseAssetId/quoteSymbolId
-// natively, so the merge is a single lookup per balance entry.
-func wrapBalancesListEmbedPrices(root *cobra.Command, gf *globalFlags) {
+// The backend has no includePrices/includeNetworks on the balances endpoint,
+// so these embeds are client-side joins.
+func wrapBalancesListEmbeds(root *cobra.Command, gf *globalFlags) {
 	var bal *cobra.Command
 	for _, res := range root.Commands() {
 		if res.Name() != "balances" {
@@ -40,14 +34,16 @@ func wrapBalancesListEmbedPrices(root *cobra.Command, gf *globalFlags) {
 	}
 	orig := bal.RunE
 	bal.RunE = func(cmd *cobra.Command, args []string) error {
-		if !embedHasToken(gf.embed, "prices") {
+		wantsPrices := embedHasToken(gf.embed, "prices")
+		wantsNetworks := embedHasToken(gf.embed, "networks")
+		if !wantsPrices && !wantsNetworks {
 			return orig(cmd, args)
 		}
-		return runBalancesWithPrices(cmd, gf)
+		return runBalancesWithEmbeds(cmd, gf, wantsPrices, wantsNetworks)
 	}
 }
 
-func runBalancesWithPrices(cmd *cobra.Command, gf *globalFlags) error {
+func runBalancesWithEmbeds(cmd *cobra.Command, gf *globalFlags, wantsPrices, wantsNetworks bool) error {
 	cli, err := buildClient(gf)
 	if err != nil {
 		return err
@@ -59,18 +55,28 @@ func runBalancesWithPrices(cmd *cobra.Command, gf *globalFlags) error {
 		return err
 	}
 
-	assetIds := mcptools.UniqueAssetIds(balances)
-	if len(assetIds) == 0 {
-		return output.Print(balances)
+	if wantsPrices {
+		if assetIds := mcptools.UniqueAssetIds(balances); len(assetIds) > 0 {
+			priceByAsset, err := mcptools.FetchAssetPrices(ctx, cli, assetIds)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warning: --embed prices: could not fetch market prices: %v\n", err)
+			} else {
+				mcptools.MergeBalancePrices(balances, priceByAsset)
+			}
+		}
 	}
 
-	priceByAsset, err := mcptools.FetchAssetPrices(ctx, cli, assetIds)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: --embed prices: could not fetch market prices: %v\n", err)
-		return output.Print(balances)
+	if wantsNetworks {
+		if networkIds := mcptools.UniqueNetworkIds(balances); len(networkIds) > 0 {
+			testnetById, err := mcptools.FetchNetworkTestnetFlags(ctx, cli, networkIds)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warning: --embed networks: could not fetch networks: %v\n", err)
+			} else {
+				mcptools.MergeBalanceNetworks(balances, testnetById)
+			}
+		}
 	}
 
-	mcptools.MergeBalancePrices(balances, priceByAsset)
 	return output.Print(balances)
 }
 
