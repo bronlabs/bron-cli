@@ -3,7 +3,7 @@ module github.com/bronlabs/bron-cli
 go 1.26
 
 require (
-	github.com/bronlabs/bron-api-toolkit v0.2.0
+	github.com/bronlabs/bron-api-toolkit v0.2.1
 	github.com/bronlabs/bron-sdk-go v0.1.19
 	github.com/google/jsonschema-go v0.4.3
 	github.com/modelcontextprotocol/go-sdk v1.6.0
