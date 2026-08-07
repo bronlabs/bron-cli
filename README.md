@@ -109,6 +109,7 @@ Examples:
   bron accounts get <accountId>
 
   bron balances list --accountId <accountId> --assetId 5000 --networkId ETH --nonEmpty true
+  bron balances list --isTestnet false --riskScoreThreshold 10    # mainnet only, hide spam airdrops
 
   bron tx list --transactionStatuses waiting-approval,signing --limit 50
   bron tx list --transactionTypes withdrawal,allowance --createdAtFrom 2026-04-01
@@ -129,18 +130,16 @@ Examples:
 
   bron tx allowance           # see "bron tx allowance --help" for params
   bron tx bridge
-  bron tx deposit
   bron tx defi
   bron tx defi-message
   bron tx intents
+  bron tx intent-solver-settlement
   bron tx stake-delegation
   bron tx stake-undelegation
   bron tx stake-claim
   bron tx stake-withdrawal
   bron tx address-creation
   bron tx address-activation
-  bron tx fiat-in
-  bron tx fiat-out
 
   bron tx withdrawal --file ./tx.json
   cat tx.json | bron tx withdrawal --file -

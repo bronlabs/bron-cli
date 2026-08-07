@@ -78,18 +78,16 @@ const rootExample = `  bron help
 
   bron tx allowance           # see "bron tx allowance --help" for params
   bron tx bridge
-  bron tx deposit
   bron tx defi
   bron tx defi-message
   bron tx intents
+  bron tx intent-solver-settlement
   bron tx stake-delegation
   bron tx stake-undelegation
   bron tx stake-claim
   bron tx stake-withdrawal
   bron tx address-creation
   bron tx address-activation
-  bron tx fiat-in
-  bron tx fiat-out
 
   bron tx withdrawal --file ./tx.json
   cat tx.json | bron tx withdrawal --file -
