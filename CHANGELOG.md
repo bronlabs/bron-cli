@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.20 — 2026-10-21
+
+### Added
+- `bron tx swap-route` — quote a swap route without creating the transaction; the reply has the dry-run transaction shape.
+- `bron address-book list --label`, `--isFavorite`, `--includeLabels`; address-book records carry `email`, `isFavorite`, `labels`, `activatedAt`.
+- `bron tx list --loanId`; loan, fiat-ramp and quote details (`extra.loan`, `extra.fiatRamp`, `extra.quoteDetails`, `extra.price`) in transaction responses.
+
+### Changed
+- Built on bron-api-toolkit v0.4.1 and bron-sdk-go v0.1.22 (OpenAPI spec of 2026-10-21).
+- `--schema` and `bron_help` list transaction and quote extras under their wire key `_embedded`.
+- MCP responses mark more counterparty-supplied text as untrusted: address-book emails, recipient emails, fiat-ramp bank names and references, asset symbols in events and portfolio summaries.
+
 ## 0.3.16 — 2026-07-23
 
 ### Changed
