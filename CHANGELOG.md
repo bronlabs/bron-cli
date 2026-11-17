@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.22 — 2026-11-17
+
+### Changed
+- Built on bron-api-toolkit v0.4.3 and bron-sdk-go v0.1.24 (OpenAPI spec of 2026-11-17).
+- `--schema` and `bron_help` show the maximum number of items for array fields: address-book accounts and labels, bulk transactions, raw and DeFi transaction payloads, transaction limit sources, destinations and approvers.
+
 ## 0.3.21 — 2026-11-17
 
 ### Added
