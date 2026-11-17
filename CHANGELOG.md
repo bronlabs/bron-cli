@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.21 — 2026-11-17
+
+### Added
+- `bron intent-pairs quote <fromAssetId> <toAssetId> --fromAmount|--toAmount [--broadcasterFeePercent]` — indicative quote for an intent swap pair; works without an API key.
+- `bron tx recreate-signing-request` and `bron tx dry-run-recreate-signing-request`.
+- Address-book records carry `note`; NFT send params carry `recipientEmail`; transactions can embed `estimations`.
+
+### Changed
+- Built on bron-api-toolkit v0.4.2 and bron-sdk-go v0.1.23 (OpenAPI spec of 2026-11-17).
+- MCP responses mark address-book notes as untrusted text.
+
+### Removed
+- `bron intents quote` — the workspace-scoped quote endpoint was removed from the API; use `bron intent-pairs quote`.
+
 ## 0.3.20 — 2026-10-21
 
 ### Added

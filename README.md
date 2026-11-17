@@ -204,7 +204,7 @@ Examples:
 
   bron intents create --json '{"params":{...}}'
   bron intents get <intentId>
-  bron intents quote --fromAssetId <assetId> --toAssetId <assetId> --fromAmount 100
+  bron intent-pairs quote <fromAssetId> <toAssetId> --fromAmount 100
 
   bron canton ledger-query --params '{"requestMethod":"GET","resource":"/v1/..."}'
 
