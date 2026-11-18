@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.23 — 2026-11-18
+
+### Changed
+- Built on bron-api-toolkit v0.4.4 and bron-sdk-go v0.1.25 (OpenAPI spec of 2026-11-18).
+
+### Removed
+- `primitivesVersion` body field of `bron tx create-signing-request` and `bron tx recreate-signing-request`, and the same field in `messagesForSigning`; the API no longer reads it.
+
 ## 0.3.22 — 2026-11-17
 
 ### Changed
